@@ -1,180 +1,39 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
-import * as path from 'path';
-import * as os from 'os';
+import { app } from 'electron';
+import Store from 'electron-store';
 import { AIService } from './ai-service';
+import { createMainWindow } from './main-process/window-manager';
+import { initializeAppLifecycle } from './main-process/app-lifecycle';
+import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc';
+import { initializeAiIpc } from './main-process/ipc-handlers/ai-ipc';
+import { initializeSettingsIpc } from './main-process/ipc-handlers/settings-ipc';
+import { cleanupPtyProcesses } from './main-process/pty-manager';
 
-// Import electron-store robustly
-const storeModule = require('electron-store');
-const Store = storeModule.default || storeModule;
-
-// Import node-pty with error handling and type definition
-interface IPty {
-    spawn: (file: string, args: string[], options: any) => IPtyProcess;
-}
-
-interface IPtyProcess {
-    pid: number;
-    write: (data: string) => void;
-    resize: (cols: number, rows: number) => void;
-    onData: (callback: (data: string) => void) => void;
-}
-
-let pty: IPty;
-try {
-    pty = require('node-pty');
-} catch (err) {
-    console.error('Failed to load node-pty:', err);
-    process.exit(1);
-}
-
-let mainWindow: BrowserWindow | null = null;
-
-const shells = new Map<string, IPtyProcess>();
-
+// Initialize electron-store
 const store = new Store({
-    encryptionKey: 'your-app-secret-key' // This helps encrypt sensitive data
-});
-
-// Initialize AI service with stored API key
-const aiService = new AIService(store.get('geminiApiKey') || '');
-
-function cleanup() {
-    // Kill all running terminal processes
-    shells.forEach((ptyProcess) => {
-        try {
-            if (process.platform === 'win32') {
-                // On Windows, we need to kill the process tree
-                const cp = require('child_process');
-                cp.exec(`taskkill /pid ${ptyProcess.pid} /T /F`);
-            } else {
-                process.kill(ptyProcess.pid);
-            }
-        } catch (err) {
-            console.error('Error killing process:', err);
-        }
-    });
-    shells.clear();
-}
-
-function createWindow() {
-    try {
-        mainWindow = new BrowserWindow({
-            width: 1200,
-            height: 800,
-            webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false
-            }
-        });
-
-        const htmlPath = path.join(__dirname, '../index.html');
-        console.log('Loading HTML from:', htmlPath);
-        mainWindow.loadURL(`file://${htmlPath}`);
-        mainWindow.webContents.openDevTools();
-
-        mainWindow.on('closed', () => {
-            cleanup();
-            mainWindow = null;
-        });
-    } catch (err) {
-        const error = err as Error;
-        console.error('Error creating window:', error);
-        process.exit(1);
-    }
-}
-
-// Terminal handling
-
-ipcMain.on('terminal:create', (event, id: string) => {
-    try {
-        const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-        const ptyProcess = pty.spawn(shell, [], {
-            name: 'xterm-color',
-            cols: 80,
-            rows: 30,
-            cwd: process.env.HOME,
-            env: process.env
-        });
-
-        shells.set(id, ptyProcess);
-
-        ptyProcess.onData((data: string) => {
-            mainWindow?.webContents.send('terminal:data', { id, data });
-        });
-
-        console.log('Terminal process created with ID:', id);
-    } catch (err) {
-        const error = err as Error;
-        console.error('Error creating terminal:', error);
-        mainWindow?.webContents.send('terminal:error', { id, error: error.message });
+    encryptionKey: 'your-app-secret-key', // Consider a more secure way to handle this in production
+    defaults: {
+        geminiApiKey: '',
+        geminiModelName: 'gemini-1.5-flash-latest'
     }
 });
 
-ipcMain.on('terminal:input', (event, { id, data }: { id: string; data: string }) => {
-    try {
-        const ptyProcess = shells.get(id);
-        if (ptyProcess) {
-            ptyProcess.write(data);
-        }
-    } catch (err) {
-        const error = err as Error;
-        console.error('Error writing to terminal:', error);
-    }
-});
+// Initialize AI Service
+const aiService = new AIService(
+    store.get('geminiApiKey') as string || '',
+    store.get('geminiModelName') as string
+);
 
-ipcMain.on('terminal:resize', (event, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
-    try {
-        const ptyProcess = shells.get(id);
-        if (ptyProcess) {
-            ptyProcess.resize(cols, rows);
-        }
-    } catch (err) {
-        const error = err as Error;
-        console.error('Error resizing terminal:', error);
-    }
-});
+// Initialize IPC Handlers
+initializeTerminalIpc();
+initializeAiIpc(aiService, store);
+initializeSettingsIpc(store, aiService);
 
-// AI handling
-ipcMain.handle('ai:process-query', async (event, { query, terminalHistory }) => {
-    try {
-        const apiKey = store.get('geminiApiKey') || '';
-        if (!apiKey) {
-            throw new Error('Gemini API key is not set. Please set it in settings.');
-        }
-        // Ensure aiService is initialized or updated with the latest key
-        if (aiService.getApiKey() !== apiKey) {
-            aiService.updateApiKey(apiKey);
-        }
-        return await aiService.processQuery(query, terminalHistory);
-    } catch (error) {
-        console.error('AI processing error:', error);
-        throw error;
-    }
-});
+// Initialize App Lifecycle
+// The onClosed callback for the window manager will handle PTY cleanup.
+initializeAppLifecycle(() => createMainWindow(cleanupPtyProcesses));
 
-// Handle API key updates
-ipcMain.handle('settings:set-api-key', async (event, apiKey: string) => {
-    store.set('geminiApiKey', apiKey);
-    // Reinitialize AI service with new key
-    aiService.updateApiKey(apiKey);
-    return true;
-});
-
-ipcMain.handle('settings:get-api-key', async () => {
-    return store.get('geminiApiKey') || '';
-});
-
-app.whenReady().then(createWindow);
-
-app.on('window-all-closed', () => {
-    cleanup();
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
-});
-
-app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-    }
+// Graceful shutdown for other cases (e.g., app.quit() explicitly called)
+app.on('before-quit', () => {
+    console.log('Application is about to quit. Cleaning up...');
+    cleanupPtyProcesses();
 });

@@ -9,34 +9,41 @@ class AIService {
     private genAI!: GoogleGenerativeAI | null;
     private model!: GenerativeModel | null;
     private apiKey: string;
+    private modelName: string;
 
-    constructor(apiKey: string) {
+    constructor(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
-        this.initializeWithKey(apiKey);
+        this.modelName = modelName;
+        this.initializeWithKeyAndModel(apiKey, modelName);
     }
 
-    private initializeWithKey(apiKey: string) {
-        this.apiKey = apiKey; // Store the key
-        if (apiKey) { // Only initialize if key is present
+    private initializeWithKeyAndModel(apiKey: string, modelName: string) {
+        this.apiKey = apiKey;
+        this.modelName = modelName;
+        if (apiKey && modelName) {
             this.genAI = new GoogleGenerativeAI(apiKey);
-            this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+            this.model = this.genAI.getGenerativeModel({ model: this.modelName });
         } else {
             this.genAI = null;
             this.model = null;
         }
     }
 
-    updateApiKey(apiKey: string) {
-        this.initializeWithKey(apiKey);
+    updateApiKeyAndModel(apiKey: string, modelName: string) {
+        this.initializeWithKeyAndModel(apiKey, modelName);
     }
 
-    getApiKey(): string { // Added this method
+    getApiKey(): string {
         return this.apiKey;
     }
 
+    getModelName(): string {
+        return this.modelName;
+    }
+
     async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {
-        if (!this.apiKey || !this.model) {
-            throw new Error('AI Service is not initialized. API key may be missing or invalid.');
+        if (!this.apiKey || !this.modelName || !this.model) {
+            throw new Error('AI Service is not initialized. API key or Model Name may be missing or invalid.');
         }
         try {
             const prompt = `You are an AI assistant helping with terminal commands.
@@ -56,7 +63,6 @@ class AIService {
             const response = await result.response;
             const text = response.text();
 
-            // Parse the response to extract command if present
             const commandMatch = text.match(/Command:\s*(.+)$/m);
             const explanationMatch = text.match(/Explanation:\s*(.+)(?=\nCommand:|$)/s);
 
