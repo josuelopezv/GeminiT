@@ -24,6 +24,60 @@
             padding: 10px;
             display: flex;
             flex-direction: column;
+            position: relative;
+        }
+        #settings-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            padding: 5px;
+            font-size: 20px;
+        }
+        #settings-panel {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #252526;
+            padding: 20px;
+            z-index: 1000;
+        }
+        #settings-panel.visible {
+            display: block;
+        }
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .settings-close {
+            background: none;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .settings-group {
+            margin-bottom: 15px;
+        }
+        .settings-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .settings-group input {
+            width: 100%;
+            padding: 8px;
+            background-color: #3c3c3c;
+            border: 1px solid #555;
+            color: #fff;
+            box-sizing: border-box;
         }
         #ai-output {
             flex: 1;
@@ -82,6 +136,17 @@
 <body>
     <div id="terminal-container"></div>
     <div id="ai-panel">
+        <button id="settings-btn">⚙️</button>
+        <div id="settings-panel">
+            <div class="settings-header">
+                <h3>Settings</h3>
+                <button class="settings-close">✕</button>
+            </div>
+            <div class="settings-group">
+                <label for="api-key">Gemini API Key:</label>
+                <input type="password" id="api-key" placeholder="Enter your API key">
+            </div>
+        </div>
         <div id="ai-output"></div>
         <div id="ai-input">
             <input type="text" placeholder="Ask AI for help..." />

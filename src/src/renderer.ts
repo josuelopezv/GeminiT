@@ -7,6 +7,47 @@ import { ipcRenderer } from 'electron';
 // Import xterm styles
 import '@xterm/xterm/css/xterm.css';
 
+// Settings panel setup
+const settingsBtn = document.getElementById('settings-btn');
+const settingsPanel = document.getElementById('settings-panel');
+const settingsClose = document.querySelector('.settings-close');
+const apiKeyInput = document.getElementById('api-key') as HTMLInputElement;
+
+let hasValidApiKey = false;
+
+// Load saved API key
+async function loadApiKey() {
+    const savedKey = await ipcRenderer.invoke('settings:get-api-key');
+    if (savedKey) {
+        apiKeyInput.value = savedKey;
+        hasValidApiKey = true;
+    }
+}
+
+// Handle settings panel visibility
+settingsBtn?.addEventListener('click', () => {
+    settingsPanel?.classList.add('visible');
+});
+
+settingsClose?.addEventListener('click', () => {
+    settingsPanel?.classList.remove('visible');
+});
+
+// Handle API key changes
+apiKeyInput?.addEventListener('change', async () => {
+    const newKey = apiKeyInput.value.trim();
+    if (newKey) {
+        await ipcRenderer.invoke('settings:set-api-key', newKey);
+        hasValidApiKey = true;
+        settingsPanel?.classList.remove('visible');
+    } else {
+        hasValidApiKey = false;
+    }
+});
+
+// Load API key when app starts
+loadApiKey();
+
 // Terminal setup and history tracking
 let terminalHistory = '';
 const maxHistoryLength = 1000; // Keep last 1000 characters
@@ -88,6 +129,12 @@ const aiOutput = document.querySelector('#ai-output') as HTMLDivElement;
 
 aiButton?.addEventListener('click', async () => {
     if (!aiInput?.value.trim()) return;
+    
+    if (!hasValidApiKey) {
+        appendMessage('System', 'Please set your Gemini API key in settings first');
+        settingsPanel?.classList.add('visible');
+        return;
+    }
 
     const query = aiInput.value;
     aiInput.value = '';

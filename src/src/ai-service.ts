@@ -10,8 +10,16 @@ class AIService {
     private model: any;
 
     constructor(apiKey: string) {
+        this.initializeWithKey(apiKey);
+    }
+
+    private initializeWithKey(apiKey: string) {
         this.genAI = new GoogleGenerativeAI(apiKey);
         this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+    }
+
+    updateApiKey(apiKey: string) {
+        this.initializeWithKey(apiKey);
     }
 
     async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {

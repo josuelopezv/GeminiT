@@ -6,7 +6,7 @@
     "start": "npm run build && electron .",
     "build": "tsc -p tsconfig.main.json && webpack",
     "watch": "webpack --watch",
-    "dev": "cross-env GEMINI_API_KEY=your-api-key-here npm run build && electron ."
+    "dev": "dotenv npm run build && dotenv electron ."
   },
   "keywords": [],
   "author": "",
@@ -22,14 +22,16 @@
   "devDependencies": {
     "@types/electron": "^1.4.38",
     "@types/node": "^22.15.17",
+    "cross-env": "^7.0.3",
     "css-loader": "^7.1.2",
+    "dotenv": "^16.5.0",
+    "dotenv-cli": "^8.0.0",
     "electron": "^36.2.0",
     "electron-builder": "^26.0.12",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.3",
     "webpack": "^5.99.8",
-    "webpack-cli": "^6.0.1",
-    "cross-env": "^7.0.3"
+    "webpack-cli": "^6.0.1"
   }
 }

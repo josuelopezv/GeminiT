@@ -1,7 +1,11 @@
+// Load environment variables
+require('dotenv').config();
+
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import { AIService } from './ai-service';
+const Store = require('electron-store');
 
 // Import node-pty with error handling and type definition
 interface IPty {
@@ -27,8 +31,12 @@ let mainWindow: BrowserWindow | null = null;
 
 const shells = new Map<string, IPtyProcess>();
 
-// Initialize AI service
-const aiService = new AIService(process.env.GEMINI_API_KEY || '');
+const store = new Store({
+    encryptionKey: 'your-app-secret-key' // This helps encrypt sensitive data
+});
+
+// Initialize AI service with stored API key
+const aiService = new AIService(store.get('geminiApiKey') || '');
 
 function cleanup() {
     // Kill all running terminal processes
@@ -137,6 +145,18 @@ ipcMain.handle('ai:process-query', async (event, { query, terminalHistory }) => 
         console.error('AI processing error:', error);
         throw error;
     }
+});
+
+// Handle API key updates
+ipcMain.handle('settings:set-api-key', async (event, apiKey: string) => {
+    store.set('geminiApiKey', apiKey);
+    // Reinitialize AI service with new key
+    aiService.updateApiKey(apiKey);
+    return true;
+});
+
+ipcMain.handle('settings:get-api-key', async () => {
+    return store.get('geminiApiKey') || '';
 });
 
 app.whenReady().then(createWindow);
