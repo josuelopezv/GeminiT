@@ -1,0 +1,35 @@
+{
+  "name": "ai-augmented-terminal",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "npm run build && electron .",
+    "build": "tsc -p tsconfig.main.json && webpack",
+    "watch": "webpack --watch",
+    "dev": "cross-env GEMINI_API_KEY=your-api-key-here npm run build && electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Cross-platform desktop terminal application with AI assistance",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@xterm/addon-fit": "^0.9.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "node-pty": "github:microsoft/node-pty"
+  },
+  "devDependencies": {
+    "@types/electron": "^1.4.38",
+    "@types/node": "^22.15.17",
+    "css-loader": "^7.1.2",
+    "electron": "^36.2.0",
+    "electron-builder": "^26.0.12",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.8",
+    "webpack-cli": "^6.0.1",
+    "cross-env": "^7.0.3"
+  }
+}

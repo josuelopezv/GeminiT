@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI-Augmented Terminal</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:">
+    <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #terminal-container {
+            flex: 1;
+            padding: 10px;
+            background-color: #1e1e1e;
+        }
+        #ai-panel {
+            width: 300px;
+            background-color: #252526;
+            color: #fff;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        #ai-output {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #2d2d2d;
+        }
+        #ai-input {
+            display: flex;
+            gap: 5px;
+        }
+        #ai-input input {
+            flex: 1;
+            padding: 8px;
+            background-color: #3c3c3c;
+            border: 1px solid #555;
+            color: #fff;
+        }
+        #ai-input button {
+            padding: 8px 15px;
+            background-color: #0e639c;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+        }
+        #ai-input button:hover {
+            background-color: #1177bb;
+        }
+        .suggested-command {
+            background-color: #2a2a2a;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .command-text {
+            font-family: monospace;
+            color: #66d9ef;
+        }
+        .execute-btn {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .execute-btn:hover {
+            background-color: #1177bb;
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal-container"></div>
+    <div id="ai-panel">
+        <div id="ai-output"></div>
+        <div id="ai-input">
+            <input type="text" placeholder="Ask AI for help..." />
+            <button>Send</button>
+        </div>
+    </div>
+    <script src="dist/renderer.js"></script>
+</body>
+</html>
