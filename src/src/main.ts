@@ -1,11 +1,11 @@
-// Load environment variables
-require('dotenv').config();
-
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import { AIService } from './ai-service';
-const Store = require('electron-store');
+
+// Import electron-store robustly
+const storeModule = require('electron-store');
+const Store = storeModule.default || storeModule;
 
 // Import node-pty with error handling and type definition
 interface IPty {
@@ -137,8 +137,13 @@ ipcMain.on('terminal:resize', (event, { id, cols, rows }: { id: string; cols: nu
 // AI handling
 ipcMain.handle('ai:process-query', async (event, { query, terminalHistory }) => {
     try {
-        if (!process.env.GEMINI_API_KEY) {
-            throw new Error('GEMINI_API_KEY environment variable is not set');
+        const apiKey = store.get('geminiApiKey') || '';
+        if (!apiKey) {
+            throw new Error('Gemini API key is not set. Please set it in settings.');
+        }
+        // Ensure aiService is initialized or updated with the latest key
+        if (aiService.getApiKey() !== apiKey) {
+            aiService.updateApiKey(apiKey);
         }
         return await aiService.processQuery(query, terminalHistory);
     } catch (error) {

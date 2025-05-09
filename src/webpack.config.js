@@ -1,5 +1,4 @@
 const path = require('path');
-const webpack = require('webpack');
 
 module.exports = {
     mode: 'development',
@@ -25,10 +24,5 @@ module.exports = {
     resolve: {
         extensions: ['.tsx', '.ts', '.js']
     },
-    plugins: [
-        new webpack.DefinePlugin({
-            'process.env.GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY || '')
-        })
-    ],
     devtool: 'source-map'
 };

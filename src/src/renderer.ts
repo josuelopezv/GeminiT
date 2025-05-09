@@ -168,7 +168,8 @@ aiButton?.addEventListener('click', async () => {
             });
         }
     } catch (error) {
-        appendMessage('Error', error.message);
+        const err = error as Error; // Explicitly type the error
+        appendMessage('Error', err.message);
     }
 });
 

@@ -6,7 +6,7 @@
     "start": "npm run build && electron .",
     "build": "tsc -p tsconfig.main.json && webpack",
     "watch": "webpack --watch",
-    "dev": "dotenv npm run build && dotenv electron ."
+    "dev": "npm run build && electron ."
   },
   "keywords": [],
   "author": "",
@@ -17,15 +17,13 @@
     "@xterm/addon-fit": "^0.9.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
+    "electron-store": "^9.0.0",
     "node-pty": "github:microsoft/node-pty"
   },
   "devDependencies": {
     "@types/electron": "^1.4.38",
     "@types/node": "^22.15.17",
-    "cross-env": "^7.0.3",
     "css-loader": "^7.1.2",
-    "dotenv": "^16.5.0",
-    "dotenv-cli": "^8.0.0",
     "electron": "^36.2.0",
     "electron-builder": "^26.0.12",
     "style-loader": "^4.0.0",

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 
 interface AIResponse {
     text: string;
@@ -6,23 +6,38 @@ interface AIResponse {
 }
 
 class AIService {
-    private genAI: GoogleGenerativeAI;
-    private model: any;
+    private genAI!: GoogleGenerativeAI | null;
+    private model!: GenerativeModel | null;
+    private apiKey: string;
 
     constructor(apiKey: string) {
+        this.apiKey = apiKey;
         this.initializeWithKey(apiKey);
     }
 
     private initializeWithKey(apiKey: string) {
-        this.genAI = new GoogleGenerativeAI(apiKey);
-        this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+        this.apiKey = apiKey; // Store the key
+        if (apiKey) { // Only initialize if key is present
+            this.genAI = new GoogleGenerativeAI(apiKey);
+            this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+        } else {
+            this.genAI = null;
+            this.model = null;
+        }
     }
 
     updateApiKey(apiKey: string) {
         this.initializeWithKey(apiKey);
     }
 
+    getApiKey(): string { // Added this method
+        return this.apiKey;
+    }
+
     async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {
+        if (!this.apiKey || !this.model) {
+            throw new Error('AI Service is not initialized. API key may be missing or invalid.');
+        }
         try {
             const prompt = `You are an AI assistant helping with terminal commands.
             Recent terminal history:
