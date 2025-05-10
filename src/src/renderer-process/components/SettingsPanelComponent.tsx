@@ -1,7 +1,5 @@
-// src/renderer-process/components/SettingsPanelComponent.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { ipcRenderer } from 'electron';
-// We will move logic from model-select.ts and settings-ui.ts here or adapt it.
 
 interface SettingsPanelProps {
     isVisible: boolean;
@@ -147,12 +145,6 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
                              </button>
                         )}
                     </div>
-                    {/* <button 
-                        onClick={onClose} 
-                        className="w-full mt-4 p-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium"
-                    >
-                        Done
-                    </button> */} 
                 </div>
             </div>
         </div>

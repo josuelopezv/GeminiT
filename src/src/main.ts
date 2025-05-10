@@ -8,9 +8,9 @@ import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc'
 import { initializeAiIpc } from './main-process/ipc-handlers/ai-ipc';
 import { initializeSettingsIpc } from './main-process/ipc-handlers/settings-ipc';
 import { cleanupPtyProcesses } from './main-process/pty-manager';
-import { Logger } from './utils/logger'; // Import Logger
+import { Logger } from './utils/logger'; 
 
-const logger = new Logger('Main'); // Create a logger instance for main.ts
+const logger = new Logger('Main'); 
 
 logger.info('Application starting...');
 
@@ -55,7 +55,6 @@ initializeAppLifecycle(() => createMainWindow(cleanupPtyProcesses));
 // Graceful shutdown
 app.on('before-quit', () => {
     logger.info('Application before-quit. Final cleanup (already handled by will-quit in app-lifecycle).');
-    // cleanupPtyProcesses(); // This is likely redundant if already in app.on('will-quit')
 });
 
 // Graceful shutdown for uncaught exceptions or signals (optional but good practice)

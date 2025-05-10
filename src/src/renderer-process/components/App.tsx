@@ -1,9 +1,8 @@
-// src/renderer-process/components/App.tsx
 import React, { useState, useCallback, useEffect } from 'react';
-import { ipcRenderer } from 'electron'; // Needed to load initial settings
+import { ipcRenderer } from 'electron'; 
 import TerminalComponent from './TerminalComponent';
 import AiPanelComponent from './AiPanelComponent';
-import SettingsPanelComponent from './SettingsPanelComponent'; // Import the new component
+import SettingsPanelComponent from './SettingsPanelComponent'; 
 
 const App: React.FC = () => {
     const [terminalId] = useState(() => Math.random().toString(36).substring(2, 15));
@@ -40,9 +39,9 @@ const App: React.FC = () => {
     }, []);
 
     return (
-        <div className="flex h-screen font-sans bg-gray-800 overflow-hidden"> {/* Added overflow-hidden to parent */}
+        <div className="flex h-screen font-sans bg-gray-800 overflow-hidden"> 
             {/* Terminal Panel Wrapper */}
-            <div className="flex-1 p-1 bg-gray-900 min-w-0"> {/* Added min-w-0 to allow shrinking */}
+            <div className="flex-1 p-1 bg-gray-900 min-w-0"> 
                 <TerminalComponent 
                     terminalId={terminalId} 
                     onHistoryChange={handleTerminalHistoryChange} 
@@ -57,8 +56,6 @@ const App: React.FC = () => {
                     terminalHistory={terminalHistory}
                     isSettingsPanelVisible={isSettingsPanelVisible} 
                     setIsSettingsPanelVisible={setIsSettingsPanelVisible} 
-                    // Pass current API key and model name status down
-                    // These will be used instead of legacy calls in AiPanelComponent
                     apiKeyStatus={{ isValid: !!apiKey, key: apiKey }} 
                     currentModelNameFromApp={modelName}
                 />
@@ -68,8 +65,8 @@ const App: React.FC = () => {
                 <SettingsPanelComponent 
                     isVisible={isSettingsPanelVisible} 
                     onClose={() => setIsSettingsPanelVisible(false)}
-                    initialApiKey={apiKey}        // Pass current apiKey as initial
-                    initialModelName={modelName}  // Pass current modelName as initial
+                    initialApiKey={apiKey}        
+                    initialModelName={modelName}  
                     onApiKeyChange={handleApiKeyChange}
                     onModelNameChange={handleModelNameChange}
                 />

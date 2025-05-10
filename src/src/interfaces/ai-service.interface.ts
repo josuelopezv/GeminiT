@@ -1,9 +1,3 @@
-// src/interfaces/ai-service.interface.ts
-
-// Remove direct import of AIResponse from ../ai-service, as IAIResponse is the generic one.
-// import { AIResponse } from '../ai-service'; 
-import { Part, FunctionResponsePart } from '@google/generative-ai'; // Keep these for now, they define input parts
-
 export interface IToolCall {
     id: string;
     functionName: string;

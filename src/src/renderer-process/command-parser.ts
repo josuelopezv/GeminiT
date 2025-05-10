@@ -1,4 +1,3 @@
-// src/renderer-process/command-parser.ts
 export interface ParsedCommand {
     command: string;
     lang?: string; // e.g., "powershell", "sh"

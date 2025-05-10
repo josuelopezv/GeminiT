@@ -1,11 +1,10 @@
-// src/renderer-process/components/TerminalComponent.tsx
 import React, { useEffect, useRef } from 'react';
 import { ipcRenderer } from 'electron';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { stripAnsiCodes } from '../../utils/string-utils';
-import { Logger } from '../../utils/logger'; // Assuming Logger is in utils
+import { Logger } from '../../utils/logger'; 
 
 // Global set to track terminal IDs for which PTY creation has been requested
 const ptyCreationRequested = new Set<string>();
@@ -139,9 +138,6 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             }
             fitAddonRef.current = null;
             isComponentInitializedRef.current = false; 
-            // Do not remove from ptyCreationRequested here, as the PTY in main process might still exist
-            // and is associated with this terminalId for the app session.
-            // ipcRenderer.send('terminal:destroy', terminalId); // TODO
         };
     }, [terminalId, onHistoryChange, logger]);
 

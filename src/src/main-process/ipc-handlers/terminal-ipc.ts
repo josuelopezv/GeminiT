@@ -1,11 +1,11 @@
 import { ipcMain } from 'electron';
 import * as os from 'os';
-import { spawnPtyProcess, writeToPty, resizePty, shells } from '../pty-manager'; // Removed IPtyProcess as it's used internally by pty-manager
+import { spawnPtyProcess, writeToPty, resizePty, shells } from '../pty-manager';
 import { getMainWindow } from '../window-manager';
 import { captureCommandOutput } from '../command-output-capturer';
-import { Logger } from '../../utils/logger'; // Import Logger
+import { Logger } from '../../utils/logger';
 
-const logger = new Logger('TerminalIPC'); // Create a logger instance for this module
+const logger = new Logger('TerminalIPC');
 
 export function initializeTerminalIpc() {
     const terminalShellTypes = new Map<string, 'powershell.exe' | 'bash'>();

@@ -1,8 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import { cleanupPtyProcesses } from './pty-manager';
-import { Logger } from '../utils/logger'; // Corrected import path
+import { Logger } from '../utils/logger';
 
-const logger = new Logger('AppLifecycle'); // Create a logger instance
+const logger = new Logger('AppLifecycle');
 
 export function initializeAppLifecycle(createWindowCallback: () => BrowserWindow) {
     app.whenReady().then(() => {

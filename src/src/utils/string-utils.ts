@@ -1,7 +1,6 @@
-// src/utils/string-utils.ts
-import { Logger } from './logger'; // Import Logger
+import { Logger } from './logger'; 
 
-const logger = new Logger('StringUtils'); // Create a logger instance for this module
+const logger = new Logger('StringUtils'); 
 
 /**
  * Strips ANSI escape codes and processes backspace characters from a string.

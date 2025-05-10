@@ -27,7 +27,7 @@
     "src/main-process/**/*.ts", // Exclude other main process files
     "src/ai-service.ts",
     "src/ai-tools.ts",
-    "src/gemini-chat-session-manager.ts",
+    "src/gemini-chat-manager.ts",
     "src/google-ai-utils.ts"
     // Keep tsconfig.main.json for main process specific compilation
   ]

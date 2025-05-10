@@ -1,8 +1,8 @@
 import { BrowserWindow } from 'electron';
 import * as path from 'path';
-import { Logger } from '../utils/logger'; // Corrected import path
+import { Logger } from '../utils/logger'; 
 
-const logger = new Logger('WindowManager'); // Create a logger instance
+const logger = new Logger('WindowManager'); 
 
 export let mainWindow: BrowserWindow | null = null;
 

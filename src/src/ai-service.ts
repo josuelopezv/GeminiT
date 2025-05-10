@@ -1,6 +1,5 @@
-import { Part, FunctionResponsePart } from '@google/generative-ai';
 import { fetchModelsFromGoogle } from './google-ai-utils';
-import { GeminiChatSessionManager } from './gemini-chat-session-manager';
+import { GeminiChatSessionManager } from './gemini-chat-manager';
 import { IAiService, IAIResponse, IChatResponse, GenericMessagePart } from './interfaces/ai-service.interface';
 import { Logger } from './utils/logger'; // Import Logger
 

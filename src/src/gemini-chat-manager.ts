@@ -4,7 +4,6 @@ import {
     Content, 
     Part, 
     ChatSession, 
-    Tool,
     FunctionResponsePart,
     GenerateContentResponse,
     FunctionCall
@@ -17,9 +16,9 @@ import {
     IChatCompletionPart, 
     IChatCompletionCandidate 
 } from './interfaces/ai-service.interface';
-import { Logger } from './utils/logger'; // Import Logger
+import { Logger } from './utils/logger'; 
 
-const logger = new Logger('GeminiChatManager'); // Create a logger instance
+const logger = new Logger('GeminiChatManager'); 
 const MAX_CHAT_HISTORY_LENGTH = 20;
 
 export class GeminiChatSessionManager implements IChatManager {

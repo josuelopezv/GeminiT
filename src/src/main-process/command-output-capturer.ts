@@ -1,9 +1,9 @@
 import { IPtyProcess } from './pty-manager'; 
 import { IDisposable } from 'node-pty';
 import { stripAnsiCodes } from '../utils/string-utils';
-import { Logger } from '../utils/logger'; // Import Logger
+import { Logger } from '../utils/logger';
 
-const logger = new Logger('CmdOutputCapturer'); // Create a logger instance for this module
+const logger = new Logger('CmdOutputCapturer');
 
 export interface CaptureCommandOutputResult {
     output?: string;
@@ -27,7 +27,7 @@ export function captureCommandOutput(
 
         const toolOutputListener = (data: string) => {
             if (commandOutputFinished) return;
-            logger.debug(`[${toolCallId}] Raw data chunk:`, data); // Use logger, pass data as arg for better formatting
+            logger.debug(`[${toolCallId}] Raw data chunk:`, data); 
             capturedOutput += data;
             logger.debug(`[${toolCallId}] Accumulated:`, capturedOutput);
 
@@ -41,7 +41,7 @@ export function captureCommandOutput(
 
                 let outputBeforeMarker = capturedOutput.substring(0, markerIndex);
                 logger.debug(`[${toolCallId}] Before ANSI strip:`, outputBeforeMarker);
-                let strippedOutput = stripAnsiCodes(outputBeforeMarker); // stripAnsiCodes still uses its own console.logs
+                let strippedOutput = stripAnsiCodes(outputBeforeMarker);
                 logger.debug(`[${toolCallId}] After ANSI strip:`, strippedOutput);
 
                 const lines = strippedOutput.split(/\r?\n/);

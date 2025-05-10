@@ -1,9 +1,9 @@
 import * as os from 'os';
 import * as child_process from 'child_process';
 import { IDisposable } from 'node-pty';
-import { Logger } from '../utils/logger'; // Corrected import path
+import { Logger } from '../utils/logger'; 
 
-const logger = new Logger('PtyManager'); // Create a logger instance
+const logger = new Logger('PtyManager'); 
 
 export interface IPtyProcess {
     pid: number;
