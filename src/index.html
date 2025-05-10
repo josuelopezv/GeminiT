@@ -148,7 +148,10 @@
             </div>
             <div class="settings-group">
                 <label for="model-name">Gemini Model Name:</label>
-                <input type="text" id="model-name" placeholder="e.g., gemini-1.5-flash-latest">
+                <select id="model-name">
+                    <option value="">Loading models...</option> 
+                </select>
+                <small>Enter API key to load models. <button id="refresh-models-btn" style="display:none;">Refresh Models</button></small>
             </div>
         </div>
         <div id="ai-output"></div>

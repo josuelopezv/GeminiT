@@ -1,5 +1,4 @@
 import { app, BrowserWindow } from 'electron';
-import { createMainWindow, getMainWindow } from './window-manager';
 import { cleanupPtyProcesses } from './pty-manager';
 
 export function initializeAppLifecycle(createWindowCallback: () => BrowserWindow) {

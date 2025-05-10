@@ -7,15 +7,82 @@ import { ipcRenderer } from 'electron';
 // Import xterm styles
 import '@xterm/xterm/css/xterm.css';
 
+// Function to strip ANSI escape codes
+function stripAnsiCodes(str: string): string {
+    // Regex to remove common ANSI escape sequences
+    // This covers color codes, cursor movement, screen clearing, etc.
+    return str.replace(/[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+}
+
 // Settings panel setup
 const settingsBtn = document.getElementById('settings-btn');
 const settingsPanel = document.getElementById('settings-panel');
 const settingsClose = document.querySelector('.settings-close');
 const apiKeyInput = document.getElementById('api-key') as HTMLInputElement;
-const modelNameInput = document.getElementById('model-name') as HTMLInputElement; // Added this line
+const modelNameInput = document.getElementById('model-name') as HTMLSelectElement; // Changed to HTMLSelectElement
+const refreshModelsBtn = document.getElementById('refresh-models-btn') as HTMLButtonElement;
 
 let hasValidApiKey = false;
-let currentModelName = ''; // Added this line
+let currentModelName = '';
+
+// Function to populate the model dropdown
+function populateModelDropdown(models: string[], selectedModel?: string) {
+    modelNameInput.innerHTML = ''; // Clear existing options
+
+    if (models.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No compatible models found or API key invalid.';
+        modelNameInput.appendChild(option);
+        refreshModelsBtn.style.display = 'inline'; // Show refresh button
+        return;
+    }
+
+    refreshModelsBtn.style.display = 'none'; // Hide refresh button if models are loaded
+
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = model;
+        if (model === selectedModel) {
+            option.selected = true;
+        }
+        modelNameInput.appendChild(option);
+    });
+
+    // If a selected model was passed and is in the list, ensure it's set
+    // Otherwise, if currentModelName is in the list, set it
+    // Otherwise, if there are models, select the first one by default
+    if (selectedModel && models.includes(selectedModel)) {
+        modelNameInput.value = selectedModel;
+    } else if (currentModelName && models.includes(currentModelName)) {
+        modelNameInput.value = currentModelName;
+    } else if (models.length > 0) {
+        modelNameInput.value = models[0];
+        // Trigger change to save this default if no prior selection was valid
+        modelNameInput.dispatchEvent(new Event('change')); 
+    }
+}
+
+// Function to fetch and populate models
+async function fetchAndPopulateModels(currentSelectedModel?: string) {
+    if (!hasValidApiKey) {
+        populateModelDropdown([], currentSelectedModel);
+        refreshModelsBtn.style.display = 'inline';
+        return;
+    }
+    try {
+        modelNameInput.innerHTML = '<option value="">Loading models...</option>'; // Show loading state
+        const models: string[] = await ipcRenderer.invoke('ai:list-models');
+        populateModelDropdown(models, currentSelectedModel || currentModelName);
+    } catch (error) {
+        const err = error as Error;
+        console.error('Error fetching models:', err);
+        appendMessage('Error', `Failed to load models: ${err.message}`);
+        populateModelDropdown([], currentSelectedModel || currentModelName); // Show error state in dropdown
+        refreshModelsBtn.style.display = 'inline';
+    }
+}
 
 // Load saved API key and model name
 async function loadSettings() {
@@ -24,23 +91,28 @@ async function loadSettings() {
         apiKeyInput.value = savedKey;
         hasValidApiKey = true;
     }
-    const savedModelName = await ipcRenderer.invoke('settings:get-model-name'); // Added this block
+    const savedModelName = await ipcRenderer.invoke('settings:get-model-name');
     if (savedModelName) {
-        modelNameInput.value = savedModelName;
         currentModelName = savedModelName;
-    } else {
-        // If no model name is saved, fetch the default from main (if any was set)
-        const defaultModelName = await ipcRenderer.invoke('settings:get-model-name');
-        if (defaultModelName) {
-            modelNameInput.value = defaultModelName;
-            currentModelName = defaultModelName;
-        }
+        // Don't populate dropdown here directly, let settings panel opening or API key change trigger it
+        // Just set the value if it exists, populateModelDropdown will handle selection logic
+        modelNameInput.value = savedModelName; 
+    }
+    // Attempt to fetch models if API key is already set on load
+    if (hasValidApiKey) {
+        fetchAndPopulateModels(currentModelName);
     }
 }
 
 // Handle settings panel visibility
 settingsBtn?.addEventListener('click', () => {
     settingsPanel?.classList.add('visible');
+    if (hasValidApiKey) {
+        fetchAndPopulateModels(currentModelName); // Fetch models when panel opens if API key is set
+    } else {
+        populateModelDropdown([], currentModelName);
+        refreshModelsBtn.style.display = 'inline';
+    }
 });
 
 settingsClose?.addEventListener('click', () => {
@@ -53,19 +125,25 @@ apiKeyInput?.addEventListener('change', async () => {
     if (newKey) {
         await ipcRenderer.invoke('settings:set-api-key', newKey);
         hasValidApiKey = true;
-        // Do not close panel automatically, user might want to change model name too
+        fetchAndPopulateModels(currentModelName); // Fetch models after API key is set
     } else {
         hasValidApiKey = false;
+        populateModelDropdown([], currentModelName);
+        refreshModelsBtn.style.display = 'inline';
     }
 });
 
-// Handle Model Name changes // Added this block
+// Handle Model Name select changes
 modelNameInput?.addEventListener('change', async () => {
-    const newModelName = modelNameInput.value.trim();
+    const newModelName = modelNameInput.value;
     if (newModelName) {
         await ipcRenderer.invoke('settings:set-model-name', newModelName);
         currentModelName = newModelName;
     }
+});
+
+refreshModelsBtn?.addEventListener('click', () => {
+    fetchAndPopulateModels(currentModelName);
 });
 
 // Load API key and model name when app starts
@@ -73,7 +151,7 @@ loadSettings();
 
 // Terminal setup and history tracking
 let terminalHistory = '';
-const maxHistoryLength = 1000; // Keep last 1000 characters
+const maxHistoryLength = 2000; // Keep last 2000 characters of *cleaned* history
 
 // Terminal setup
 const terminal = new Terminal({
@@ -114,9 +192,10 @@ terminal.onData((data: string) => {
 
 ipcRenderer.on('terminal:data', (event: Electron.IpcRendererEvent, { id, data }: { id: string; data: string }) => {
     if (id === terminalId) {
-        terminal.write(data);
-        // Update terminal history
-        terminalHistory += data;
+        terminal.write(data); // Write raw data (with ANSI codes) to the xterm.js terminal
+        // Update terminal history with *cleaned* data
+        const cleanedData = stripAnsiCodes(data);
+        terminalHistory += cleanedData;
         if (terminalHistory.length > maxHistoryLength) {
             terminalHistory = terminalHistory.slice(-maxHistoryLength);
         }
@@ -152,15 +231,18 @@ const aiOutput = document.querySelector('#ai-output') as HTMLDivElement;
 
 aiButton?.addEventListener('click', async () => {
     if (!aiInput?.value.trim()) return;
-    
+
     if (!hasValidApiKey) {
         appendMessage('System', 'Please set your Gemini API key in settings first');
         settingsPanel?.classList.add('visible');
         return;
     }
-    if (!currentModelName) { // Added this check
-        appendMessage('System', 'Please set your Gemini Model Name in settings first');
+    // Ensure currentModelName is up-to-date from the dropdown selection
+    currentModelName = modelNameInput.value; 
+    if (!currentModelName) {
+        appendMessage('System', 'Please select a Gemini Model Name in settings first.');
         settingsPanel?.classList.add('visible');
+        fetchAndPopulateModels(); // Attempt to load models if not already
         return;
     }
 
@@ -171,9 +253,10 @@ aiButton?.addEventListener('click', async () => {
     appendMessage('User', query);
 
     try {
+        // Send the cleaned terminal history
         const response = await ipcRenderer.invoke('ai:process-query', {
             query,
-            terminalHistory
+            terminalHistory // This is now cleaned history
         });
 
         appendMessage('AI', response.text);

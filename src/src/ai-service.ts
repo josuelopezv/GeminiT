@@ -14,22 +14,58 @@ class AIService {
     constructor(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
-        this.initializeWithKeyAndModel(apiKey, modelName);
+        // Initialize genAI here if apiKey is present, otherwise it remains null
+        if (this.apiKey) {
+            try {
+                this.genAI = new GoogleGenerativeAI(this.apiKey);
+            } catch (error) {
+                console.error('Error initializing GoogleGenerativeAI in constructor:', error);
+                this.genAI = null;
+            }
+        }
+        this.initializeWithKeyAndModel(apiKey, modelName); // This will set up the specific model
     }
 
     private initializeWithKeyAndModel(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
-        if (apiKey && modelName) {
-            this.genAI = new GoogleGenerativeAI(apiKey);
-            this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+        if (apiKey && !this.genAI) { // If genAI not initialized yet, and apiKey is now available
+            try {
+                this.genAI = new GoogleGenerativeAI(apiKey);
+            } catch (error) {
+                console.error('Error initializing GoogleGenerativeAI in initializeWithKeyAndModel:', error);
+                this.genAI = null;
+                this.model = null;
+                return;
+            }
+        }
+
+        if (this.genAI && modelName) {
+            try {
+                this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+            } catch (error) {
+                console.error(`Error initializing AI Service with model ${modelName}:`, error);
+                this.model = null;
+            }
         } else {
-            this.genAI = null;
             this.model = null;
         }
     }
 
     updateApiKeyAndModel(apiKey: string, modelName: string) {
+        // If API key changes, genAI needs to be re-instantiated
+        if (apiKey !== this.apiKey || !this.genAI) {
+            try {
+                this.genAI = new GoogleGenerativeAI(apiKey);
+            } catch (error) {
+                console.error('Error re-initializing GoogleGenerativeAI in updateApiKeyAndModel:', error);
+                this.genAI = null; // Set to null on error
+                this.model = null;
+                this.apiKey = apiKey; // Still update apiKey and modelName for next attempt
+                this.modelName = modelName;
+                return;
+            }
+        }
         this.initializeWithKeyAndModel(apiKey, modelName);
     }
 
@@ -39,6 +75,50 @@ class AIService {
 
     getModelName(): string {
         return this.modelName;
+    }
+
+    async listAvailableModels(): Promise<string[]> {
+        if (!this.apiKey) {
+            console.warn('Cannot list models: API key is not set.');
+            return [];
+        }
+
+        let tempGenAI: GoogleGenerativeAI | null = null;
+        try {
+            tempGenAI = new GoogleGenerativeAI(this.apiKey);
+        } catch (error) {
+            console.error('Error initializing GoogleGenerativeAI for listing models:', error);
+            return [];
+        }
+
+        if (!tempGenAI) {
+             console.error('Failed to initialize GoogleGenerativeAI for listing models.');
+             return [];
+        }
+
+        try {
+            // @ts-ignore - keeping this temporarily if the issue is subtle typing, but the runtime error is the main concern
+            const models = await tempGenAI.listModels(); 
+            const compatibleModels: string[] = [];
+            for (const m of models) {
+                if (m.supportedGenerationMethods.includes('generateContent') && !m.name.includes('chat-bison') && !m.name.includes('text-bison')) {
+                    compatibleModels.push(m.name.replace(/^models\//, ''));
+                }
+            }
+            if (!compatibleModels.length) {
+                 console.warn("No models found supporting 'generateContent'. Check API key permissions or model availability.");
+            }
+            return compatibleModels;
+        } catch (error) {
+            console.error('Error listing available models (runtime):', error);
+            // Log the actual error to see if it's an auth issue or method not found
+            if (error instanceof Error && error.message.includes('listModels is not a function')){
+                console.error("AIService: tempGenAI.listModels is indeed not a function. SDK version or usage might be incorrect.");
+            } else if (error instanceof Error && (error.message.includes('401') || error.message.includes('403'))) {
+                console.error("AIService: Authentication/Permission error when listing models. Check API Key.");
+            }
+            return [];
+        }
     }
 
     async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {
