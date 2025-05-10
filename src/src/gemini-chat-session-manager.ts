@@ -16,13 +16,15 @@ import {
     GenericMessagePart, 
     IChatCompletionPart, 
     IChatCompletionCandidate 
-} from './interfaces/ai-service.interface'; // Import new interfaces
+} from './interfaces/ai-service.interface';
+import { Logger } from './utils/logger'; // Import Logger
 
+const logger = new Logger('GeminiChatManager'); // Create a logger instance
 const MAX_CHAT_HISTORY_LENGTH = 20;
 
-export class GeminiChatSessionManager implements IChatManager { // Implement IChatManager
+export class GeminiChatSessionManager implements IChatManager {
     private genAI: GoogleGenerativeAI | null = null;
-    private modelInstance!: GenerativeModel | null; // Definite assignment assertion
+    private modelInstance!: GenerativeModel | null;
     private currentChatSession: ChatSession | null = null;
     private apiKey: string;
     private modelName: string;
@@ -46,15 +48,18 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
                         tools: [EXECUTE_TERMINAL_COMMAND_TOOL] 
                     });
                     this.startNewChatSession();
+                    logger.info(`SDK and model initialized for: ${this.modelName}`);
                 } else {
                     this.modelInstance = null;
+                    logger.warn('Model name or genAI instance not available during SDK init.');
                 }
             } catch (error) {
-                console.error('Error initializing GoogleGenerativeAI or Model in ChatManager:', error);
+                logger.error('Error initializing GoogleGenerativeAI or Model in ChatManager:', error);
                 this.genAI = null;
                 this.modelInstance = null;
             }
         } else {
+            logger.warn('API key not provided for ChatManager initialization.');
             this.genAI = null;
             this.modelInstance = null;
         }
@@ -62,7 +67,7 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
 
     private startNewChatSession() {
         if (!this.modelInstance) {
-            console.error('ChatManager: Model instance not available to start chat session.');
+            logger.error('Model instance not available to start chat session.');
             this.currentChatSession = null;
             return;
         }
@@ -75,7 +80,7 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
         3. For other shell commands (e.g., cmd, bash), use '\`\`\`sh'.
         4. ALWAYS provide commands on a single line; do not break them into multiple lines.
         5. Keep your explanations concise and to the point.
-        6. If you decide to execute a command, you MUST use the 'execute_terminal_command' tool.`;
+        6. If you decide to execute a command, you MUST use the 'execute_terminal_command' tool.`; // Keep your detailed prompt
         this.chatHistory = [
             { role: "user", parts: [{ text: initialModelInstruction }] },
             { role: "model", parts: [{ text: "Understood. I will follow these instructions and use the execute_terminal_command tool when appropriate." }] }
@@ -84,6 +89,7 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
             history: this.chatHistory,
             tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
         });
+        logger.info('New chat session started.');
     }
 
     public updateCredentials(apiKey: string, modelName: string) {
@@ -93,6 +99,7 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
         this.modelName = modelName;
 
         if (keyChanged || modelChanged) {
+            logger.info(`Updating credentials. Key changed: ${keyChanged}, Model changed: ${modelChanged}`);
             this.initializeSdkAndModel();
         }
     }
@@ -103,31 +110,26 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
             const systemPrompts = this.chatHistory.slice(0, 2);
             const recentHistory = this.chatHistory.slice(this.chatHistory.length - (MAX_CHAT_HISTORY_LENGTH - 2));
             this.chatHistory = [...systemPrompts, ...recentHistory];
+            logger.debug('Chat history truncated.');
         }
     }
 
-    // Helper to map GenericMessagePart to Gemini SDK Part
     private mapGenericPartsToGeminiParts(parts: GenericMessagePart[]): Part[] {
         return parts.map(p => {
             if ('text' in p) {
                 return { text: p.text };
             }
             if ('functionResponse' in p) {
-                // Ensure the structure matches Gemini's FunctionResponsePart expectation
                 return { functionResponse: p.functionResponse } as FunctionResponsePart;
             }
-            // Add mapping for functionCall if needed for sending to Gemini, though typically Gemini generates these
             if ('functionCall' in p && p.functionCall) {
-                 // This case is less common for *sending* messages, more for interpreting responses
-                 // For now, let's assume we don't send functionCall parts this way
-                 console.warn('Mapping GenericMessagePart with functionCall to Gemini Part - this is unusual for sending.');
-                 return { functionCall: p.functionCall as FunctionCall }; // Cast to SDK's FunctionCall
+                 logger.warn('Mapping GenericMessagePart with functionCall to Gemini Part - this is unusual for sending.');
+                 return { functionCall: p.functionCall as FunctionCall }; 
             }
             throw new Error('Unsupported GenericMessagePart type for Gemini mapping');
         });
     }
 
-    // Helper to map Gemini GenerateContentResponse to IChatResponse
     private mapGeminiResponseToIChatResponse(geminiResponse: GenerateContentResponse): IChatResponse {
         const candidates: IChatCompletionCandidate[] = (geminiResponse.candidates || []).map(candidate => {
             const parts: IChatCompletionPart[] = (candidate.content?.parts || []).map(part => {
@@ -153,8 +155,9 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
 
     public async sendMessage(userQueryGenericParts: GenericMessagePart[]): Promise<IChatResponse | null> {
         if (!this.currentChatSession) {
-            console.error('ChatManager: No active chat session.');
+            logger.error('No active chat session for sendMessage.');
             if (this.apiKey && this.modelName) {
+                logger.info('Attempting to re-initialize SDK and model for sendMessage.');
                 this.initializeSdkAndModel();
                 if (!this.currentChatSession) return null;
             } else {
@@ -163,17 +166,19 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
         }
         try {
             const geminiParts = this.mapGenericPartsToGeminiParts(userQueryGenericParts);
-            const userContent: Content = { role: "user", parts: geminiParts }; // History uses Gemini Content type
+            const userContent: Content = { role: "user", parts: geminiParts }; 
             this.addToHistory(userContent);
+            logger.debug('Sending message to Gemini:', userQueryGenericParts);
             
             const result = await this.currentChatSession.sendMessage(geminiParts);
+            logger.debug('Received response from Gemini.');
             
             if (result.response.candidates && result.response.candidates.length > 0) {
                 this.addToHistory(result.response.candidates[0].content);
             }
             return this.mapGeminiResponseToIChatResponse(result.response);
         } catch (error) {
-            console.error('ChatManager.sendMessage error:', error);
+            logger.error('ChatManager.sendMessage error:', error);
             if (this.chatHistory.length > 0 && this.chatHistory[this.chatHistory.length -1].role === "user") {
                 this.chatHistory.pop();
             }
@@ -183,22 +188,23 @@ export class GeminiChatSessionManager implements IChatManager { // Implement ICh
 
     public async sendFunctionResponse(functionResponseGenericParts: GenericMessagePart[]): Promise<IChatResponse | null> {
         if (!this.currentChatSession) {
-            console.error('ChatManager: No active chat session for function response.');
+            logger.error('No active chat session for sendFunctionResponse.');
             return null;
         }
         try {
             const geminiFunctionResponseParts = this.mapGenericPartsToGeminiParts(functionResponseGenericParts) as FunctionResponsePart[];
-            // History uses Gemini Content type
             this.addToHistory({ role: "function", parts: geminiFunctionResponseParts });
+            logger.debug('Sending function response to Gemini:', functionResponseGenericParts);
 
             const result = await this.currentChatSession.sendMessage(geminiFunctionResponseParts);
+            logger.debug('Received response from Gemini after function response.');
             
             if (result.response.candidates && result.response.candidates.length > 0) {
                 this.addToHistory(result.response.candidates[0].content);
             }
             return this.mapGeminiResponseToIChatResponse(result.response);
         } catch (error) {
-            console.error('ChatManager.sendFunctionResponse error:', error);
+            logger.error('ChatManager.sendFunctionResponse error:', error);
             throw error;
         }
     }

@@ -40,24 +40,29 @@ const App: React.FC = () => {
     }, []);
 
     return (
-        <div className="flex h-screen font-sans bg-gray-800">
-            <div className="flex-1 p-1 bg-gray-900">
+        <div className="flex h-screen font-sans bg-gray-800 overflow-hidden"> {/* Added overflow-hidden to parent */}
+            {/* Terminal Panel Wrapper */}
+            <div className="flex-1 p-1 bg-gray-900 min-w-0"> {/* Added min-w-0 to allow shrinking */}
                 <TerminalComponent 
                     terminalId={terminalId} 
                     onHistoryChange={handleTerminalHistoryChange} 
                 />
             </div>
 
-            <AiPanelComponent 
-                terminalId={terminalId} 
-                terminalHistory={terminalHistory}
-                isSettingsPanelVisible={isSettingsPanelVisible} 
-                setIsSettingsPanelVisible={setIsSettingsPanelVisible} 
-                // Pass current API key and model name status down
-                // These will be used instead of legacy calls in AiPanelComponent
-                apiKeyStatus={{ isValid: !!apiKey, key: apiKey }} 
-                currentModelNameFromApp={modelName}
-            />
+            {/* AI Panel Wrapper - This will be the resizable part */}
+            {/* For now, fixed initial width, but structured for resizing */}
+            <div className="flex-shrink-0 basis-96 p-0 bg-gray-700"> {/* Use flex-basis for initial size, p-0 as AiPanelComponent has padding */}
+                <AiPanelComponent 
+                    terminalId={terminalId} 
+                    terminalHistory={terminalHistory}
+                    isSettingsPanelVisible={isSettingsPanelVisible} 
+                    setIsSettingsPanelVisible={setIsSettingsPanelVisible} 
+                    // Pass current API key and model name status down
+                    // These will be used instead of legacy calls in AiPanelComponent
+                    apiKeyStatus={{ isValid: !!apiKey, key: apiKey }} 
+                    currentModelNameFromApp={modelName}
+                />
+            </div>
 
             {isSettingsPanelVisible && (
                 <SettingsPanelComponent 

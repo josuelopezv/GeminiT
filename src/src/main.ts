@@ -1,13 +1,18 @@
 import { app } from 'electron';
-import Store, { Schema as ElectronStoreSchema } from 'electron-store'; // Import Schema as ElectronStoreSchema to avoid name collision if any
+import Store, { Schema as ElectronStoreSchema } from 'electron-store';
 import { AIService } from './ai-service';
-import { IAiService } from './interfaces/ai-service.interface'; // Import the interface
+import { IAiService } from './interfaces/ai-service.interface';
 import { createMainWindow } from './main-process/window-manager';
 import { initializeAppLifecycle } from './main-process/app-lifecycle';
 import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc';
 import { initializeAiIpc } from './main-process/ipc-handlers/ai-ipc';
 import { initializeSettingsIpc } from './main-process/ipc-handlers/settings-ipc';
 import { cleanupPtyProcesses } from './main-process/pty-manager';
+import { Logger } from './utils/logger'; // Import Logger
+
+const logger = new Logger('Main'); // Create a logger instance for main.ts
+
+logger.info('Application starting...');
 
 // Define the schema structure for electron-store
 interface AppStoreSchemaContents {
@@ -49,6 +54,25 @@ initializeAppLifecycle(() => createMainWindow(cleanupPtyProcesses));
 
 // Graceful shutdown
 app.on('before-quit', () => {
-    console.log('Application is about to quit. Cleaning up...');
+    logger.info('Application before-quit. Final cleanup (already handled by will-quit in app-lifecycle).');
+    // cleanupPtyProcesses(); // This is likely redundant if already in app.on('will-quit')
+});
+
+// Graceful shutdown for uncaught exceptions or signals (optional but good practice)
+process.on('uncaughtException', (error) => {
+    logger.error('Uncaught Exception:', error);
     cleanupPtyProcesses();
+    app.quit(); // Force quit on unhandled exception
+});
+
+process.on('SIGINT', () => {
+    logger.info('Received SIGINT. Cleaning up and quitting...');
+    cleanupPtyProcesses();
+    app.quit();
+});
+
+process.on('SIGTERM', () => {
+    logger.info('Received SIGTERM. Cleaning up and quitting...');
+    cleanupPtyProcesses();
+    app.quit();
 });

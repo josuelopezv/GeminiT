@@ -4,7 +4,11 @@ import { ipcRenderer } from 'electron';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { stripAnsiCodes } from '../ui-utils';
+import { stripAnsiCodes } from '../../utils/string-utils';
+import { Logger } from '../../utils/logger'; // Assuming Logger is in utils
+
+// Global set to track terminal IDs for which PTY creation has been requested
+const ptyCreationRequested = new Set<string>();
 
 interface TerminalComponentProps {
     terminalId: string;
@@ -17,13 +21,17 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
     const fitAddonRef = useRef<FitAddon | null>(null);
     const localTerminalHistoryRef = useRef<string>('');
     const MAX_HISTORY_LENGTH = 2000;
+    // isInitializedRef is for the component instance, not global PTY creation
+    const isComponentInitializedRef = useRef(false); 
+    const logger = useRef(new Logger(`TerminalComponent[${terminalId}]`)).current;
 
     useEffect(() => {
-        if (!terminalRef.current || xtermInstanceRef.current) { // Prevent re-initialization if already initialized
+        if (!terminalRef.current || isComponentInitializedRef.current) {
             return;
         }
+        isComponentInitializedRef.current = true;
 
-        console.log(`TerminalComponent: Initializing for terminalId: ${terminalId}`);
+        logger.info('Initializing component instance...');
 
         const xterm = new Terminal({
             theme: {
@@ -45,7 +53,6 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
 
         xterm.open(terminalRef.current);
         
-        // Delay initial fit to allow DOM to settle
         const initialFitTimeout = setTimeout(() => {
             if (fitAddonRef.current) {
                 try {
@@ -58,17 +65,20 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
                         });
                     }
                 } catch (e) {
-                    console.error("Error during initial fitAddon.fit():", e);
+                    logger.error("Error during initial fitAddon.fit():", e);
                 }
             }
-            xterm.focus(); // Focus after initial fit
-        }, 50); // Small delay
+            xterm.focus();
+        }, 50);
 
-        ipcRenderer.send('terminal:create', terminalId);
-
-        xterm.onData((data: string) => {
-            ipcRenderer.send('terminal:input', { id: terminalId, data });
-        });
+        // Only send terminal:create if it hasn't been sent for this terminalId yet
+        if (!ptyCreationRequested.has(terminalId)) {
+            ipcRenderer.send('terminal:create', terminalId);
+            ptyCreationRequested.add(terminalId);
+            logger.info('terminal:create IPC sent.');
+        } else {
+            logger.info('terminal:create IPC already sent for this ID, skipping.');
+        }
 
         const handleTerminalData = (event: Electron.IpcRendererEvent, { id, data }: { id: string; data: string }) => {
             if (id === terminalId && xtermInstanceRef.current) {
@@ -84,6 +94,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
 
         const handleTerminalError = (event: Electron.IpcRendererEvent, { id, error }: { id: string; error: string }) => {
             if (id === terminalId && xtermInstanceRef.current) {
+                logger.warn(`Received terminal error:`, error);
                 xtermInstanceRef.current.write(`\r\n\x1b[31mError: ${error}\x1b[0m\r\n`);
             }
         };
@@ -101,7 +112,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
                         rows: xtermInstanceRef.current.rows 
                     });
                 } catch (e) {
-                    console.error("Error during handleResize fitAddon.fit():", e);
+                    logger.error("Error during handleResize fitAddon.fit():", e);
                 }
             }
         };
@@ -112,15 +123,13 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             resizeTimeout = setTimeout(handleResize, 100);
         };
         window.addEventListener('resize', debouncedResize);
-        // Initial resize call also delayed slightly
         const initialResizeTimeout = setTimeout(handleResize, 100);
 
-        // Cleanup on component unmount
         return () => {
-            console.log(`TerminalComponent: Cleaning up for terminalId: ${terminalId}`);
+            logger.info('Cleaning up component instance...');
             clearTimeout(initialFitTimeout);
             clearTimeout(initialResizeTimeout);
-            clearTimeout(resizeTimeout); // Clear any pending debounced resize
+            clearTimeout(resizeTimeout);
             ipcRenderer.removeAllListeners('terminal:data');
             ipcRenderer.removeAllListeners('terminal:error');
             window.removeEventListener('resize', debouncedResize);
@@ -128,11 +137,13 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
                 xtermInstanceRef.current.dispose();
                 xtermInstanceRef.current = null;
             }
-            fitAddonRef.current = null; // Clear addon ref
-            // TODO: Send a message to main process to destroy the PTY instance associated with terminalId
-            // ipcRenderer.send('terminal:destroy', terminalId);
+            fitAddonRef.current = null;
+            isComponentInitializedRef.current = false; 
+            // Do not remove from ptyCreationRequested here, as the PTY in main process might still exist
+            // and is associated with this terminalId for the app session.
+            // ipcRenderer.send('terminal:destroy', terminalId); // TODO
         };
-    }, [terminalId, onHistoryChange]);
+    }, [terminalId, onHistoryChange, logger]);
 
     return <div ref={terminalRef} id="terminal-component-container" className="w-full h-full bg-gray-900"></div>;
 };

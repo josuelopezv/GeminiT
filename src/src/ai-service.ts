@@ -1,33 +1,29 @@
-import { Part, FunctionResponsePart } from '@google/generative-ai'; // Keep for constructing parts to send
+import { Part, FunctionResponsePart } from '@google/generative-ai';
 import { fetchModelsFromGoogle } from './google-ai-utils';
 import { GeminiChatSessionManager } from './gemini-chat-session-manager';
-import { 
-    IAiService, 
-    IChatManager, 
-    IAIResponse, 
-    IChatResponse, 
-    IToolCall,
-    GenericMessagePart 
-} from './interfaces/ai-service.interface'; // Import our defined interfaces
+import { IAiService, IAIResponse, IChatResponse, GenericMessagePart } from './interfaces/ai-service.interface';
+import { Logger } from './utils/logger'; // Import Logger
 
+const logger = new Logger('AIService'); // Create a logger instance
 const MAX_AI_HISTORY_CONTEXT_CHARS = 1000; 
 
-class AIService implements IAiService { // Implement IAiService
-    private chatManager: IChatManager; // Use IChatManager interface
+class AIService implements IAiService {
+    private chatManager: GeminiChatSessionManager; 
     private currentApiKey: string;
     private currentModelName: string;
 
     constructor(apiKey: string, modelName: string) {
         this.currentApiKey = apiKey;
         this.currentModelName = modelName;
-        // Instantiate the concrete GeminiChatSessionManager
         this.chatManager = new GeminiChatSessionManager(apiKey, modelName);
+        logger.info(`Initialized with model: ${modelName}`);
     }
 
     public updateApiKeyAndModel(apiKey: string, modelName: string) {
         this.currentApiKey = apiKey;
         this.currentModelName = modelName;
         this.chatManager.updateCredentials(apiKey, modelName);
+        logger.info(`Updated to model: ${modelName}`);
     }
 
     public getApiKey(): string {
@@ -39,11 +35,11 @@ class AIService implements IAiService { // Implement IAiService
     }
 
     async listAvailableModels(): Promise<string[]> {
+        logger.debug('Listing available models...');
         return fetchModelsFromGoogle(this.currentApiKey);
     }
 
     private cleanAndPrepareTerminalHistory(terminalHistory: string): string {
-        // ... (existing cleaning logic remains the same) ...
         let processedHistory = terminalHistory.trim(); 
         processedHistory = processedHistory.replace(/\r\n/g, '\n'); 
         const historyLines = processedHistory.split('\n');
@@ -61,39 +57,39 @@ class AIService implements IAiService { // Implement IAiService
 
     async processQuery(query: string, terminalHistory: string): Promise<IAIResponse> {
         const condensedHistory = this.cleanAndPrepareTerminalHistory(terminalHistory);
-        const fullQueryWithContext = `User Query: ${query}\n\nRecent Terminal Activity (cleaned, up to ${MAX_AI_HISTORY_CONTEXT_CHARS} chars of relevant lines):\n${condensedHistory || '(No recent terminal activity to show)'}`;
         
-        // Use GenericMessagePart for sending
-        const queryMessageParts: GenericMessagePart[] = [{ text: fullQueryWithContext }];
-
-        if (!require('electron').app.isPackaged) {
-            console.log(`[DEV AI Service] Condensed History for AI Prompt (${condensedHistory.length} chars):\n${JSON.stringify(condensedHistory)}`);
+        if (!require('electron').app.isPackaged) { 
+            logger.debug(`Condensed History for AI Prompt (${condensedHistory.length} chars):`, condensedHistory);
         }
+
+        const fullQueryWithContext = `User Query: ${query}\n\nRecent Terminal Activity (cleaned, up to ${MAX_AI_HISTORY_CONTEXT_CHARS} chars of relevant lines):\n${condensedHistory || '(No recent terminal activity to show)'}`;
+        const queryMessageParts: GenericMessagePart[] = [{ text: fullQueryWithContext }];
 
         try {
             const chatManagerResponse: IChatResponse | null = await this.chatManager.sendMessage(queryMessageParts);
 
             if (!chatManagerResponse) {
+                logger.error('Received null response from ChatManager.sendMessage');
                 throw new Error('Received null response from ChatManager.sendMessage');
             }
 
             if (!chatManagerResponse.candidates || chatManagerResponse.candidates.length === 0) {
-                console.warn('AIService.processQuery: No candidates found in chat manager response.');
+                logger.warn('No candidates found in chat manager response.');
                 return { text: "[AI did not provide a response candidate]" };
             }
 
             const candidate = chatManagerResponse.candidates[0];
             if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-                console.warn('AIService.processQuery: No parts found in response candidate content.');
+                logger.warn('No parts found in response candidate content.');
                 return { text: "[AI response candidate had no content parts]" };
             }
 
             for (const part of candidate.content.parts) {
                 if (part.functionCall) {
-                    console.log('AIService: Detected functionCall part:', JSON.stringify(part.functionCall));
+                    logger.debug(`Detected functionCall part:`, part.functionCall);
                     return {
                         toolCall: {
-                            id: part.functionCall.name, // Or a more unique ID if available from the generic response
+                            id: part.functionCall.name, 
                             functionName: part.functionCall.name,
                             args: part.functionCall.args
                         }
@@ -110,32 +106,32 @@ class AIService implements IAiService { // Implement IAiService
             return { text: combinedText };
 
         } catch (error) {
-            console.error('AIService.processQuery Error:', error);
+            logger.error('AIService.processQuery Error:', error);
             throw error;
         }
     }
 
     async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse> {
-        console.log(`AIService: Processing tool execution result for ${functionName} (ID: ${toolCallId})`);
+        logger.debug(`Processing tool execution result for ${functionName} (ID: ${toolCallId})`);
         
-        // Use GenericMessagePart for sending
         const functionResponseGenericParts: GenericMessagePart[] = [{
             functionResponse: {
                 name: functionName, 
-                response: { name: functionName, content: { output: commandOutput } }, // Ensure this structure matches GenericMessagePart
+                response: { name: functionName, content: { output: commandOutput } },
             }
         }];
 
         try {
             const chatManagerResponse: IChatResponse | null = await this.chatManager.sendFunctionResponse(functionResponseGenericParts);
             if (!chatManagerResponse) {
+                logger.error('Received null response from ChatManager.sendFunctionResponse');
                 throw new Error('Received null response from ChatManager.sendFunctionResponse');
             }
 
             if (!chatManagerResponse.candidates || chatManagerResponse.candidates.length === 0 || 
                 !chatManagerResponse.candidates[0].content || !chatManagerResponse.candidates[0].content.parts || 
                 chatManagerResponse.candidates[0].content.parts.length === 0) {
-                console.warn('AIService.processToolExecutionResult: No valid text part found in chat manager response after tool execution.');
+                logger.warn('No valid text part found in chat manager response after tool execution.');
                 return { text: "[AI did not provide a follow-up text response]" };
             }
             
@@ -148,7 +144,7 @@ class AIService implements IAiService { // Implement IAiService
             return { text: combinedText };
 
         } catch (error) {
-            console.error('AIService.processToolExecutionResult Error:', error);
+            logger.error('AIService.processToolExecutionResult Error:', error);
             return { text: `Error processing tool result: ${(error as Error).message}` };
         }
     }

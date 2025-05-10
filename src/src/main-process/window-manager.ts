@@ -1,5 +1,8 @@
 import { BrowserWindow } from 'electron';
 import * as path from 'path';
+import { Logger } from '../utils/logger'; // Corrected import path
+
+const logger = new Logger('WindowManager'); // Create a logger instance
 
 export let mainWindow: BrowserWindow | null = null;
 
@@ -11,23 +14,24 @@ export function createMainWindow(onClosed: () => void): BrowserWindow {
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false,
-                // preload: path.join(__dirname, 'preload.js') // If you decide to use a preload script
             }
         });
 
-        const htmlPath = path.join(__dirname, '../../index.html'); // Adjusted path relative to dist/main-process/
-        console.log('Loading HTML from:', htmlPath);
+        const htmlPath = path.join(__dirname, '../../index.html'); 
+        logger.info('Loading HTML from:', htmlPath);
         mainWindow.loadURL(`file://${htmlPath}`);
         mainWindow.webContents.openDevTools();
 
         mainWindow.on('closed', () => {
+            logger.info('Main window closed.');
             mainWindow = null;
-            onClosed(); // Call the provided cleanup callback
+            onClosed();
         });
+        logger.info('Main window created successfully.');
         return mainWindow;
     } catch (err) {
         const error = err as Error;
-        console.error('Error creating window:', error);
+        logger.error('Error creating window:', error);
         process.exit(1);
     }
 }

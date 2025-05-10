@@ -19,12 +19,13 @@ To create a cross-platform desktop terminal application using Electron that allo
 ### 3.1. Target Technology Stack
 
 *   **Framework**: Electron
-*   **Frontend (Renderer Process)**: HTML, CSS, TypeScript
-*   **Terminal Component**: xterm.js
+*   **Frontend (Renderer Process)**: HTML, CSS, TypeScript, **React, Tailwind CSS**
+*   **Terminal Component**: xterm.js (to be integrated within a React component)
 *   **Backend (Main Process)**: Node.js, TypeScript
 *   **Shell Interaction**: `node-pty`
 *   **AI API**: Google Gemini API (via `@google/generative-ai` Node.js SDK)
 *   **Settings Storage**: `electron-store`
+*   **Build Tools**: Webpack, TypeScript, PostCSS
 
 ### 3.2. Key Modules/Libraries (npm packages)
 
@@ -33,6 +34,8 @@ To create a cross-platform desktop terminal application using Electron that allo
 *   `node-pty` (using `github:microsoft/node-pty`)
 *   `@google/generative-ai`
 *   `electron-store`
+*   **`react`, `react-dom`, `@types/react`, `@types/react-dom`**
+*   **`tailwindcss`, `postcss`, `autoprefixer`, `postcss-loader`**
 *   `webpack`, `ts-loader`, `typescript` for the build process.
 
 ### 3.3. Current Project Structure (Simplified)
@@ -40,64 +43,65 @@ To create a cross-platform desktop terminal application using Electron that allo
 ```
 src/
 ├── main.ts                 # Main process orchestrator
-├── ai-service.ts           # Core Gemini API interaction logic
+├── ai-service.ts           # Core AI business logic (uses GeminiChatSessionManager)
 ├── ai-tools.ts             # Gemini tool definitions
+├── gemini-chat-session-manager.ts # Manages Gemini ChatSession and API calls
 ├── google-ai-utils.ts      # Utilities for Gemini (model listing, fallbacks)
-├── renderer.ts             # Renderer process entry point
+├── renderer.tsx            # Renderer process entry point (React root render)
+├── interfaces/
+│   └── ai-service.interface.ts # Defines IAiService, IChatManager etc.
 ├── main-process/
 │   ├── app-lifecycle.ts
+│   ├── command-output-capturer.ts # Logic for capturing PTY command output
 │   ├── pty-manager.ts
 │   ├── window-manager.ts
 │   └── ipc-handlers/
 │       ├── ai-ipc.ts
 │       ├── settings-ipc.ts
 │       └── terminal-ipc.ts
-└── renderer-process/
-    ├── ai-interface.ts
-    ├── dom-elements.ts
-    ├── model-select.ts
-    ├── settings-ui.ts
-    ├── terminal-setup.ts
-    └── ui-utils.ts
-index.html
+├── renderer-process/
+│   ├── command-parser.ts     # Parses commands from AI text responses
+│   └── components/
+│       ├── AiPanelComponent.tsx
+│       ├── App.tsx             # Root React component
+│       ├── SettingsPanelComponent.tsx
+│       └── TerminalComponent.tsx
+├── styles/
+│   ├── main.css              # Legacy global styles (potentially to be merged/removed)
+│   └── tailwind.css          # Tailwind CSS directives
+├── utils/
+│   ├── logger.ts             # Main process logger utility
+│   └── string-utils.ts       # Shared string utilities (e.g., stripAnsiCodes)
+index.html                  # Basic HTML shell for React app
 package.json
-tsconfig.json             # For renderer process (via webpack)
+postcss.config.js
+tailwind.config.js
+tsconfig.json             # For renderer process (React, JSX)
 tsconfig.main.json        # For main process
 webpack.config.js
+AI_CODING_SESSION_NOTES.md
 ```
 
 ## 4. Current State & Achievements (As of May 9, 2025)
 
-*   **Basic Electron App**: Functional Electron application structure with TypeScript for main and renderer processes.
-*   **Terminal Emulation**: `xterm.js` integrated, supporting local shells (PowerShell on Windows, bash/zsh via WSL or native). PTY processes managed by `node-pty`.
-*   **AI Chat Interface**: UI panel for AI interaction.
-*   **Gemini Integration**:
-    *   Google Gemini API connected via the `@google/generative-ai` SDK.
-    *   User can input API key and select a model name (from a dropdown populated by SDK call or fallback list) via a settings panel. Settings are stored using `electron-store`.
-*   **AI Command Suggestion (Tool Use)**:
-    *   Gemini can suggest commands using a defined tool (`execute_terminal_command`).
-    *   Renderer UI displays these suggestions with "Approve" / "Deny" buttons.
-*   **Command Execution**: Approved commands are sent to the active terminal session for execution.
-*   **Initial Feedback Loop**:
-    *   Attempt to capture output from executed commands using an end-marker strategy.
-    *   Captured output is sent back to the Gemini model for follow-up.
-*   **Output/History Cleaning**:
-    *   ANSI escape codes (and backspaces) are stripped from terminal history sent to AI and from captured command output.
-    *   Initial heuristics in place to clean echoed commands from captured output (this is the current area of focus for improvement).
-*   **Code Refactoring**:
-    *   `main.ts` has been refactored into smaller, more focused modules.
-    *   `renderer.ts` has been refactored into smaller UI and logic modules.
-    *   `ai-service.ts` has been refactored to separate tool definitions and model listing utilities.
-*   **Development Aids**: Conditional logging for AI interactions in the main process console.
+*   **UI Refactored to React & Tailwind CSS**:
+    *   The entire renderer process UI has been migrated from direct DOM manipulation to a React component architecture (`App.tsx`, `TerminalComponent.tsx`, `AiPanelComponent.tsx`, `SettingsPanelComponent.tsx`).
+    *   Styling is now primarily handled by Tailwind CSS, with base styles and Tailwind directives in `styles/`.
+*   **Build System Updated**: Webpack and TypeScript configurations updated to support React (JSX, TSX) and Tailwind CSS (PostCSS).
+*   **AI Service Abstraction**: Introduced `IAiService` and `IChatManager` interfaces. `AIService` and `GeminiChatSessionManager` implement these, making the AI backend more modular and potentially swappable in the future.
+*   **Centralized Logger**: A `Logger` utility (`src/utils/logger.ts`) created and integrated into main process modules for consistent, leveled logging to the npm console.
+*   **Command Output Capturer Module**: Logic for capturing and cleaning output from AI-executed commands has been refactored into `src/main-process/command-output-capturer.ts`.
+*   **Text-Based Command Execution**: Users can now execute commands parsed from AI's textual responses (markdown code blocks) via an "Execute" button.
+*   _(Previous achievements still hold: Basic Electron App, Terminal Emulation, AI Chat Interface, Gemini Integration for API key/model selection, AI Tool Use for command suggestions, initial Feedback Loop, basic Output/History Cleaning, Main Process Refactoring, AI System Prompt enhancements)._
 
 ## 5. Pending Tasks & Current Focus
 
 ### 5.1. Immediate Focus / Current Challenge:
 
-*   **Reliable Command Output Cleaning**:
-    *   The output captured from AI-executed commands and sent back to Gemini is still often "messy". It includes shell prompts, echoed user commands, and echoed marker commands, despite current cleaning heuristics.
-    *   **Goal**: Significantly improve the cleaning logic in `src/main-process/ipc-handlers/terminal-ipc.ts` to isolate *only* the true output of the executed command. This is critical for the AI to accurately interpret results.
-    *   The detailed debug logging added in the last step should be used to analyze and refine this.
+*   **Reliable Command Output Cleaning (Ongoing)**:
+    *   **Challenge**: The output captured from AI-executed commands (via tool calls) and sent back to Gemini is still often "messy". It includes shell prompts, echoed user commands, and echoed marker commands, despite current cleaning heuristics in `command-output-capturer.ts`.
+    *   **Specific Issue**: The `stripAnsiCodes` function (now in `src/utils/string-utils.ts` and used by `command-output-capturer.ts`) is not correctly processing backspace (`\b`) characters, leading to malformed strings (e.g., `lsls` from `ls -l` echoes) which then breaks subsequent echo removal logic.
+    *   **Goal**: Fix backspace processing in `stripAnsiCodes`. Then, use the detailed debug logs (which are active) to analyze and significantly improve the cleaning logic in `command-output-capturer.ts` to isolate *only* the true output of the executed command.
 
 ### 5.2. Broader Pending Items (from Project Plan):
 
@@ -111,24 +115,13 @@ webpack.config.js
 
 ## 6. Key Learnings, Challenges & Workarounds During Development (Session Specific)
 
-*   **`@google/generative-ai` SDK `listModels()` Issue**:
-    *   **Challenge**: The `listModels()` method on the `GoogleGenerativeAI` client instance consistently fails at runtime with a "is not a function" error, despite being documented for the SDK version (`^0.24.1`).
-    *   **Workaround**: Implemented a fallback mechanism using a hardcoded list of common Gemini models (`FALLBACK_MODELS` in `google-ai-utils.ts`) to ensure the model selection dropdown in settings is always populated. A warning is logged when the fallback is used.
+*   **UI Refactoring to React/Tailwind**: Successfully migrated the entire UI to a React component architecture, using Tailwind CSS for styling. This involved setting up the build process (Webpack, PostCSS, tsconfig for JSX) and refactoring all renderer-side JavaScript into `.tsx` components.
+*   **`@google/generative-ai` SDK `listModels()` Issue**: (Still relevant) Fallback list is in place.
+*   **Command Output Capturing & Cleaning**: (Still relevant) This remains the primary technical challenge. The current focus is on fixing backspace handling in `stripAnsiCodes` and then improving echo/prompt removal.
+*   **`electron-store` TypeScript Typing**: (Still relevant) `as any` workaround is still in use.
+*   **AI System Prompt Instructions**: (Implemented) Guiding AI for formatted responses.
+*   **Code Modularity (Refactoring)**: (Ongoing) Successfully refactored main process, renderer process, and AI service logic into smaller, more maintainable modules. Introduced a shared `utils` directory.
+*   **PTY Command Execution (Cross-Platform & PowerShell)**: Identified that sending multi-line commands to PowerShell via a single PTY write can be problematic. Switched to sending the user command and marker command as separate writes for PowerShell. Using `\r` to terminate commands sent via `terminal:input` for better execution simulation.
+*   **React StrictMode & `useEffect`**: Encountered and resolved issues with `useEffect` running twice in development (e.g., double PTY creation), addressed by using a global `Set` to track PTY creation requests for `TerminalComponent`.
 
-*   **Command Output Capturing & Cleaning**:
-    *   **Challenge**: Reliably isolating the true output of commands executed via `node-pty` is difficult. The raw PTY stream includes shell prompts, echoed input commands, the command's actual output, and control characters.
-    *   **Current Strategy**: An end-marker (`printf "__TOOL_CMD_OUTPUT_END_..."`) is appended to the executed command. Output is captured until this marker. ANSI codes and backspaces are stripped. Heuristics are applied to try and remove echoed command lines and the marker command itself from the captured output.
-    *   **Status**: This remains the primary area of active debugging and refinement. Detailed debug logs have been added to `terminal-ipc.ts` to trace the cleaning process.
-
-*   **`electron-store` TypeScript Typing**:
-    *   **Challenge**: Persistent TypeScript errors where `get()` and `set()` methods were not recognized on the `electron-store` instance, despite various typing attempts (using `Schema`, explicit type annotations, and exporting the store type).
-    *   **Workaround**: Applied type assertions `(store as any).get(...)` and `(store as any).set(...)` in the main process files (`main.ts`, `ai-ipc.ts`, `settings-ipc.ts`) for calls to `electron-store`. This sacrifices some type safety for these specific calls but resolved the compilation blockers.
-
-*   **AI System Prompt Instructions**:
-    *   **Decision**: Enhanced the initial system prompt sent to the Gemini model (in `ai-service.ts`) to include specific instructions for formatting its responses (e.g., use of markdown code blocks with language identifiers for commands, keeping commands on a single line, conciseness). This aims to make the AI's output more structured and easier for the application (and user) to parse or use.
-
-*   **Code Modularity (Refactoring)**:
-    *   **Decision**: Proactively refactored `main.ts`, `renderer.ts`, and `ai-service.ts` into smaller, more focused modules. This improves organization, readability, and maintainability as the codebase grows.
-    *   **Structure**: Main process logic is now under `src/main-process/` (with sub-folders for `ipc-handlers`), renderer logic under `src/renderer-process/`, and AI-specific utilities like `ai-tools.ts` and `google-ai-utils.ts` are at the `src/` level (as they are used by `ai-service.ts` which is also at `src/`).
-
-The next step in the previous session was to test the latest improvements to the command output cleaning logic after adding more detailed debug logs.
+The next step in the previous session was to test the application after the major React UI refactoring and to analyze the detailed debug logs for command output cleaning, specifically focusing on the backspace handling in `stripAnsiCodes`.

@@ -1,3 +1,7 @@
+// This file is now deprecated as UI is being managed by React components.
+// DOM elements should be accessed via React refs within their respective components.
+// Please delete this file.
+
 export const terminalContainer = document.getElementById('terminal-container');
 export const aiPanel = document.getElementById('ai-panel');
 export const settingsBtn = document.getElementById('settings-btn');
