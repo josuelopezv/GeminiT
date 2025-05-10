@@ -3,7 +3,39 @@ import * as DOM from './dom-elements';
 import { appendMessage } from './ui-utils';
 import { terminalId, terminalHistory } from './terminal-setup';
 import { getHasValidApiKey, getCurrentModelName } from './settings-ui';
-import { IAIResponse } from '../interfaces/ai-service.interface'; // Corrected import path and type
+import { IAIResponse } from '../interfaces/ai-service.interface';
+import { parseCommandsFromText, ParsedCommand } from './command-parser'; // New import
+
+function displayParsedCommand(parsedCmd: ParsedCommand) {
+    if (!DOM.aiOutput) return;
+
+    const commandDiv = document.createElement('div');
+    commandDiv.className = 'suggested-command'; 
+    
+    let langDisplay = parsedCmd.lang ? ` (${parsedCmd.lang})` : '';
+    // Ensure command text is HTML-escaped for display to prevent XSS if it somehow contains HTML
+    const escapedCommand = parsedCmd.command.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    commandDiv.innerHTML = `
+        <div>Suggested command${langDisplay}:</div>
+        <div class="command-text">${escapedCommand}</div>
+        <button class="execute-parsed-btn">Execute</button>
+    `;
+    DOM.aiOutput.appendChild(commandDiv);
+
+    const executeBtn = commandDiv.querySelector('.execute-parsed-btn');
+    executeBtn?.addEventListener('click', () => {
+        // The command itself should be clean (already trimmed by parser)
+        const commandToExecute = parsedCmd.command; 
+
+        appendMessage('User (Execute)', commandToExecute); 
+        ipcRenderer.send('terminal:input', {
+            id: terminalId,
+            data: commandToExecute + '\r' // Changed from '\n' to '\r' for Windows/node-pty
+        });
+        commandDiv.innerHTML = `<p>Sent to terminal: <code class="command-text">${escapedCommand}</code></p>`;
+    });
+}
 
 function handleToolCall(toolCallId: string, functionName: string, command: string) {
     appendMessage('AI', `Suggested command: \`${command}\``);
@@ -83,23 +115,13 @@ async function processAiQuery() {
                 appendMessage('AI', 'Received a tool call I don\'t understand.');
             }
         } else if (response.text) {
-            appendMessage('AI', response.text);
-            // Legacy suggestedCommand can be removed if tool calls are primary
-            if (response.suggestedCommand) {
-                const commandDiv = document.createElement('div');
-                commandDiv.className = 'suggested-command';
-                commandDiv.innerHTML = `
-                    <div class="command-text">${response.suggestedCommand}</div>
-                    <button class="execute-btn">Execute (Legacy)</button>
-                `;
-                DOM.aiOutput?.appendChild(commandDiv);
-                const executeBtn = commandDiv.querySelector('.execute-btn');
-                executeBtn?.addEventListener('click', () => {
-                    ipcRenderer.send('terminal:input', {
-                        id: terminalId,
-                        data: response.suggestedCommand + '\n'
-                    });
-                });
+            appendMessage('AI', response.text); // Display the AI's full text response
+            
+            // Parse and display any commands found in the text response
+            const parsedCommands = parseCommandsFromText(response.text);
+            if (parsedCommands.length > 0) {
+                appendMessage('System', 'Found command(s) in the AI response:');
+                parsedCommands.forEach(displayParsedCommand);
             }
         }
     } catch (error) {
