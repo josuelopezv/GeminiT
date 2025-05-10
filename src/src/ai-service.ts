@@ -5,6 +5,43 @@ interface AIResponse {
     suggestedCommand?: string;
 }
 
+const FALLBACK_MODELS = [
+    'gemini-1.5-flash-latest',
+    'gemini-1.0-pro', // Older but might be available
+    'gemini-pro', // Common alias
+];
+
+async function fetchModelsFromGoogle(apiKey: string): Promise<string[]> {
+    if (!apiKey) {
+        console.warn('fetchModelsFromGoogle: API key is missing.');
+        return FALLBACK_MODELS; // Provide fallback if no API key to attempt SDK call
+    }
+    try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        // @ts-ignore - Retaining for type-checking, but runtime is the primary issue.
+        const modelsResult = await genAI.listModels();
+        const compatibleModels: string[] = [];
+        for (const m of modelsResult) {
+            if (m.supportedGenerationMethods.includes('generateContent') && !m.name.includes('chat-bison') && !m.name.includes('text-bison')) {
+                compatibleModels.push(m.name.replace(/^models\//, ''));
+            }
+        }
+        if (compatibleModels.length > 0) {
+            return compatibleModels;
+        }
+        console.warn("fetchModelsFromGoogle: No compatible models found via SDK. Using fallback list.");
+        return FALLBACK_MODELS;
+    } catch (error) {
+        console.error('fetchModelsFromGoogle: Error listing models via SDK:', error);
+        if (error instanceof Error && error.message.includes('listModels is not a function')){
+            console.warn("fetchModelsFromGoogle: genAI.listModels is not a function. SDK version or usage might be incorrect. Using fallback list.");
+        } else {
+            console.warn("fetchModelsFromGoogle: An unexpected error occurred while listing models via SDK. Using fallback list.");
+        }
+        return FALLBACK_MODELS;
+    }
+}
+
 class AIService {
     private genAI!: GoogleGenerativeAI | null;
     private model!: GenerativeModel | null;
@@ -14,7 +51,6 @@ class AIService {
     constructor(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
-        // Initialize genAI here if apiKey is present, otherwise it remains null
         if (this.apiKey) {
             try {
                 this.genAI = new GoogleGenerativeAI(this.apiKey);
@@ -23,13 +59,13 @@ class AIService {
                 this.genAI = null;
             }
         }
-        this.initializeWithKeyAndModel(apiKey, modelName); // This will set up the specific model
+        this.initializeWithKeyAndModel(apiKey, modelName);
     }
 
     private initializeWithKeyAndModel(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
-        if (apiKey && !this.genAI) { // If genAI not initialized yet, and apiKey is now available
+        if (apiKey && !this.genAI) { 
             try {
                 this.genAI = new GoogleGenerativeAI(apiKey);
             } catch (error) {
@@ -39,7 +75,6 @@ class AIService {
                 return;
             }
         }
-
         if (this.genAI && modelName) {
             try {
                 this.model = this.genAI.getGenerativeModel({ model: this.modelName });
@@ -53,15 +88,14 @@ class AIService {
     }
 
     updateApiKeyAndModel(apiKey: string, modelName: string) {
-        // If API key changes, genAI needs to be re-instantiated
         if (apiKey !== this.apiKey || !this.genAI) {
             try {
                 this.genAI = new GoogleGenerativeAI(apiKey);
             } catch (error) {
                 console.error('Error re-initializing GoogleGenerativeAI in updateApiKeyAndModel:', error);
-                this.genAI = null; // Set to null on error
+                this.genAI = null;
                 this.model = null;
-                this.apiKey = apiKey; // Still update apiKey and modelName for next attempt
+                this.apiKey = apiKey;
                 this.modelName = modelName;
                 return;
             }
@@ -78,47 +112,8 @@ class AIService {
     }
 
     async listAvailableModels(): Promise<string[]> {
-        if (!this.apiKey) {
-            console.warn('Cannot list models: API key is not set.');
-            return [];
-        }
-
-        let tempGenAI: GoogleGenerativeAI | null = null;
-        try {
-            tempGenAI = new GoogleGenerativeAI(this.apiKey);
-        } catch (error) {
-            console.error('Error initializing GoogleGenerativeAI for listing models:', error);
-            return [];
-        }
-
-        if (!tempGenAI) {
-             console.error('Failed to initialize GoogleGenerativeAI for listing models.');
-             return [];
-        }
-
-        try {
-            // @ts-ignore - keeping this temporarily if the issue is subtle typing, but the runtime error is the main concern
-            const models = await tempGenAI.listModels(); 
-            const compatibleModels: string[] = [];
-            for (const m of models) {
-                if (m.supportedGenerationMethods.includes('generateContent') && !m.name.includes('chat-bison') && !m.name.includes('text-bison')) {
-                    compatibleModels.push(m.name.replace(/^models\//, ''));
-                }
-            }
-            if (!compatibleModels.length) {
-                 console.warn("No models found supporting 'generateContent'. Check API key permissions or model availability.");
-            }
-            return compatibleModels;
-        } catch (error) {
-            console.error('Error listing available models (runtime):', error);
-            // Log the actual error to see if it's an auth issue or method not found
-            if (error instanceof Error && error.message.includes('listModels is not a function')){
-                console.error("AIService: tempGenAI.listModels is indeed not a function. SDK version or usage might be incorrect.");
-            } else if (error instanceof Error && (error.message.includes('401') || error.message.includes('403'))) {
-                console.error("AIService: Authentication/Permission error when listing models. Check API Key.");
-            }
-            return [];
-        }
+        // Use the standalone helper function
+        return fetchModelsFromGoogle(this.apiKey);
     }
 
     async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {
