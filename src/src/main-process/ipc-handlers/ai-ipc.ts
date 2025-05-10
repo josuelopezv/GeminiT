@@ -70,24 +70,4 @@ export function initializeAiIpc(aiService: IAiService, store: Store<AppStoreSche
             throw err; 
         }
     });
-
-    ipcMain.handle('ai:process-tool-result', async (event, 
-        { toolCallId, functionName, commandOutput }: 
-        { toolCallId: string; functionName: string; commandOutput: string }
-    ): Promise<IAIResponse> => {
-        try {
-            if (!app.isPackaged) {
-                logger.debug(`Tool Result for ${functionName} (ID: ${toolCallId}):`, commandOutput.substring(0, 200));
-            }
-            const response = await aiService.processToolExecutionResult(toolCallId, functionName, commandOutput);
-            if (!app.isPackaged) {
-                logger.debug(`AI Follow-up Response:`, response);
-            }
-            return response;
-        } catch (error) {
-            const err = error as Error;
-            logger.error(`Error processing AI tool result in main (ToolID: ${toolCallId}):`, err.stack || err.message);
-            throw err; 
-        }
-    });
 }

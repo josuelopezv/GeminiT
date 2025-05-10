@@ -10,12 +10,10 @@
         For now, keeping it relatively open for development.
     -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' file:; font-src 'self' data:;">
-    <!-- xterm.css is now imported in renderer.tsx via Webpack -->
 </head>
 <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div> <!-- React will mount here -->
-    <script src="./dist/renderer.js" defer></script> <!-- Added this line -->
-    <!-- Webpack will inject the bundled renderer.js script -->
+    <div id="root" class="w-full"></div>
+    <script src="./dist/renderer.js" defer></script> 
 </body>
 </html>

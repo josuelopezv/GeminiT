@@ -124,6 +124,11 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
         window.addEventListener('resize', debouncedResize);
         const initialResizeTimeout = setTimeout(handleResize, 100);
 
+        xterm.onData((data: string) => {
+            logger.debug(`xterm.onData - Sending data to main:`, data); // New log
+            ipcRenderer.send('terminal:input', { id: terminalId, data });
+        });
+
         return () => {
             logger.info('Cleaning up component instance...');
             clearTimeout(initialFitTimeout);

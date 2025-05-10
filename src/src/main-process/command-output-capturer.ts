@@ -1,3 +1,8 @@
+// This file is now deprecated as the explicit tool call feedback loop for command execution
+// (which required isolated output capturing) has been removed.
+// Command execution is now handled by parsing commands from AI text responses and sending them directly to the terminal input.
+// Please delete this file.
+
 import { IPtyProcess } from './pty-manager'; 
 import { IDisposable } from 'node-pty';
 import { stripAnsiCodes } from '../utils/string-utils';

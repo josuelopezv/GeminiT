@@ -6,7 +6,7 @@ export interface IToolCall {
 
 export interface IAIResponse {
     text?: string;
-    toolCall?: IToolCall;
+    // toolCall?: IToolCall; // This field is no longer directly returned by AIService.processQuery
 }
 
 // Generic response from a chat manager
@@ -47,5 +47,6 @@ export interface IAiService {
     getModelName(): string;
     listAvailableModels(): Promise<string[]>;
     processQuery(query: string, terminalHistory: string): Promise<IAIResponse>;
-    processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse>;
+    // processToolExecutionResult is now effectively deprecated in AIService for the new flow
+    processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse>; 
 }

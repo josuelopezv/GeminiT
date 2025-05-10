@@ -56,53 +56,54 @@ class AIService implements IAiService {
 
     async processQuery(query: string, terminalHistory: string): Promise<IAIResponse> {
         const condensedHistory = this.cleanAndPrepareTerminalHistory(terminalHistory);
-        
-        if (!require('electron').app.isPackaged) { 
-            logger.debug(`Condensed History for AI Prompt (${condensedHistory.length} chars):`, condensedHistory);
-        }
-
         const fullQueryWithContext = `User Query: ${query}\n\nRecent Terminal Activity (cleaned, up to ${MAX_AI_HISTORY_CONTEXT_CHARS} chars of relevant lines):\n${condensedHistory || '(No recent terminal activity to show)'}`;
         const queryMessageParts: GenericMessagePart[] = [{ text: fullQueryWithContext }];
+
+        if (!require('electron').app.isPackaged) {
+            logger.debug(`[AIService] Condensed History for AI Prompt (${condensedHistory.length} chars):`, condensedHistory);
+        }
 
         try {
             const chatManagerResponse: IChatResponse | null = await this.chatManager.sendMessage(queryMessageParts);
 
             if (!chatManagerResponse) {
-                logger.error('Received null response from ChatManager.sendMessage');
                 throw new Error('Received null response from ChatManager.sendMessage');
             }
 
             if (!chatManagerResponse.candidates || chatManagerResponse.candidates.length === 0) {
-                logger.warn('No candidates found in chat manager response.');
+                logger.warn('AIService.processQuery: No candidates found in chat manager response.');
                 return { text: "[AI did not provide a response candidate]" };
             }
 
             const candidate = chatManagerResponse.candidates[0];
             if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-                logger.warn('No parts found in response candidate content.');
+                logger.warn('AIService.processQuery: No parts found in response candidate content.');
                 return { text: "[AI response candidate had no content parts]" };
             }
 
-            for (const part of candidate.content.parts) {
-                if (part.functionCall) {
-                    logger.debug(`Detected functionCall part:`, part.functionCall);
-                    return {
-                        toolCall: {
-                            id: part.functionCall.name, 
-                            functionName: part.functionCall.name,
-                            args: part.functionCall.args
-                        }
-                    };
-                }
-            }
-
             let combinedText = '';
+
             for (const part of candidate.content.parts) {
-                if (part.text) {
+                if (part.functionCall && part.functionCall.name === 'execute_terminal_command') {
+                    logger.info('AIService: Gemini proposed a tool call (execute_terminal_command):', part.functionCall.args);
+                    // Convert tool call into a textual suggestion with a markdown code block
+                    const commandToSuggest = (part.functionCall.args as { command?: string }).command;
+                    if (commandToSuggest) {
+                        // Assume powershell for now if lang is not specified by AI, or make it generic 'sh'
+                        // The AI prompt already asks for ```powershell or ```sh
+                        combinedText += `The AI suggests executing the following command:\n\`\`\`sh\n${commandToSuggest}\n\`\`\`\n`;
+                    } else {
+                        combinedText += "The AI considered executing a command but didn't specify which one.\n";
+                    }
+                    // Do not set potentialToolCall here, as we are converting it to text.
+                } else if (part.text) {
                     combinedText += part.text;
                 }
             }
-            return { text: combinedText };
+            
+            // The IAIResponse interface might no longer need the toolCall field if we always do this conversion.
+            // For now, we just return text.
+            return { text: combinedText.trim() };
 
         } catch (error) {
             logger.error('AIService.processQuery Error:', error);
@@ -110,42 +111,11 @@ class AIService implements IAiService {
         }
     }
 
+    // processToolExecutionResult is now effectively unused with this new approach.
+    // We can comment it out or remove it later.
     async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse> {
-        logger.debug(`Processing tool execution result for ${functionName} (ID: ${toolCallId})`);
-        
-        const functionResponseGenericParts: GenericMessagePart[] = [{
-            functionResponse: {
-                name: functionName, 
-                response: { name: functionName, content: { output: commandOutput } },
-            }
-        }];
-
-        try {
-            const chatManagerResponse: IChatResponse | null = await this.chatManager.sendFunctionResponse(functionResponseGenericParts);
-            if (!chatManagerResponse) {
-                logger.error('Received null response from ChatManager.sendFunctionResponse');
-                throw new Error('Received null response from ChatManager.sendFunctionResponse');
-            }
-
-            if (!chatManagerResponse.candidates || chatManagerResponse.candidates.length === 0 || 
-                !chatManagerResponse.candidates[0].content || !chatManagerResponse.candidates[0].content.parts || 
-                chatManagerResponse.candidates[0].content.parts.length === 0) {
-                logger.warn('No valid text part found in chat manager response after tool execution.');
-                return { text: "[AI did not provide a follow-up text response]" };
-            }
-            
-            let combinedText = '';
-            for (const part of chatManagerResponse.candidates[0].content.parts) {
-                if (part.text) {
-                    combinedText += part.text;
-                }
-            }
-            return { text: combinedText };
-
-        } catch (error) {
-            logger.error('AIService.processToolExecutionResult Error:', error);
-            return { text: `Error processing tool result: ${(error as Error).message}` };
-        }
+        logger.warn('AIService.processToolExecutionResult called, but this flow is deprecated with the new approach.');
+        return { text: `Command output processing is deprecated in this flow. Output was: ${commandOutput.substring(0,100)}...` };
     }
 }
 

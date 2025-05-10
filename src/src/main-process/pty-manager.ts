@@ -59,6 +59,7 @@ export function writeToPty(id: string, data: string): boolean {
     const ptyProcess = shells.get(id);
     if (ptyProcess) {
         try {
+            logger.debug(`Writing to PTY ID ${id}, Data:`, data); // New log
             ptyProcess.write(data);
             return true;
         } catch (err) {
