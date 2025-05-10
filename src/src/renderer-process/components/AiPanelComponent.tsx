@@ -201,11 +201,16 @@ const AiPanelComponent: React.FC<AiPanelProps> = ({
           />
           <button
             onClick={handleSendQuery}
-            className="btn btn-primary join-item"
+            // Add loading state to the button
+            className={`btn btn-primary join-item ${isProcessing ? 'cursor-not-allowed' : ''}`}
             disabled={isProcessing || !apiKeyStatus.isValid || !currentModelNameFromApp}
             title="Send"
           >
-            <i className="ri-send-plane-2-fill text-lg"></i>
+            {isProcessing ? (
+              <span className="loading loading-spinner loading-xs"></span>
+            ) : (
+              <i className="ri-send-plane-2-fill text-lg"></i>
+            )}
           </button>
         </div>
         {(!apiKeyStatus.isValid || !currentModelNameFromApp) && (

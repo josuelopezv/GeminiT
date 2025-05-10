@@ -1,5 +1,6 @@
 import { app } from 'electron';
-import Store, { Schema as ElectronStoreSchema } from 'electron-store'; // Import Schema as ElectronStoreSchema to avoid name collision if any
+import Store, { Schema as ElectronStoreSchema } from 'electron-store';
+import { AppStoreSchemaContents } from './interfaces/store-schema.interface'; // Import shared interface
 import { AIService } from './ai-service';
 import { createMainWindow } from './main-process/window-manager';
 import { initializeAppLifecycle } from './main-process/app-lifecycle';
@@ -7,13 +8,6 @@ import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc'
 import { initializeAiIpc } from './main-process/ipc-handlers/ai-ipc';
 import { initializeSettingsIpc } from './main-process/ipc-handlers/settings-ipc';
 import { cleanupPtyProcesses } from './main-process/pty-manager';
-
-// Define the schema structure for electron-store
-interface AppStoreSchemaContents {
-    geminiApiKey: string;
-    geminiModelName: string;
-    initialModelInstruction: string;
-}
 
 const schema: ElectronStoreSchema<AppStoreSchemaContents> = {
     geminiApiKey: {
@@ -38,9 +32,9 @@ const store: Store<AppStoreSchemaContents> = new Store<AppStoreSchemaContents>({
 
 // Initialize AI Service
 const aiService = new AIService(
-    (store as any).get('geminiApiKey'),
-    (store as any).get('geminiModelName'),
-    (store as any).get('initialModelInstruction', schema.initialModelInstruction.default)
+    store.get('geminiApiKey'),
+    store.get('geminiModelName'),
+    store.get('initialModelInstruction') // Rely on electron-store to use the schema default
 );
 
 // Initialize IPC Handlers

@@ -57,12 +57,3 @@ html, body, #root {
   overflow-y: hidden; /* Prevent body scroll, components will manage their own scroll */
 }
 
-/* 
-  The following styles for #terminal-container, #ai-panel, #settings-btn, 
-  #settings-panel, .settings-group, #ai-output, #ai-input, 
-  .suggested-command, .command-approval are now largely handled by 
-  DaisyUI component classes and Tailwind utilities applied directly in the JSX. 
-  They can be removed to avoid conflicts and rely on DaisyUI's styling.
-*/
-
-/* Specific xterm.js theme is set in TerminalComponent.tsx, not here */

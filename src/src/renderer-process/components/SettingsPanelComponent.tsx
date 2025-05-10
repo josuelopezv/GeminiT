@@ -1,5 +1,5 @@
 // src/renderer-process/components/SettingsPanelComponent.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ipcRenderer } from 'electron';
 import { Logger } from '../../utils/logger';
 
@@ -32,12 +32,31 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
     const [modelInstruction, setModelInstruction] = useState(initialModelInstruction || '');
     const [isLoadingModels, setIsLoadingModels] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const dialogRef = useRef<HTMLDialogElement>(null); // Ref for the dialog element
 
     useEffect(() => {
         setApiKey(initialApiKey || '');
         setModelName(initialModelName || '');
         setModelInstruction(initialModelInstruction || '');
     }, [initialApiKey, initialModelName, initialModelInstruction, isVisible]); // Added isVisible to re-sync when panel opens
+
+    // Effect to control modal visibility using dialog API
+    useEffect(() => {
+        const dialogNode = dialogRef.current;
+        if (dialogNode) {
+            if (isVisible) {
+                dialogNode.showModal();
+            } else {
+                dialogNode.close();
+            }
+        }
+    }, [isVisible]);
+
+    const handleDialogClose = () => {
+        // This can be triggered by ESC key or backdrop click (if not prevented)
+        // Call the onClose prop to sync state with App.tsx
+        onClose();
+    };
 
     const handleFetchModels = useCallback(async () => {
         if (!apiKey) {
@@ -68,20 +87,25 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
         onModelNameChange(modelName);
         ipcRenderer.send('settings:set-initial-model-instruction', modelInstruction);
         onInitialModelInstructionChange(modelInstruction);
-        onClose();
+        onClose(); // This will trigger the useEffect to close the dialog
     };
 
-    if (!isVisible) return null;
+    // We no longer return null; the dialog element is always in the DOM but hidden/shown by its API.
+    // The `isVisible` prop now controls it via useEffect.
 
     return (
-        <div className="modal modal-open"> {/* DaisyUI modal class for overlay and centering */}
-            <div className="modal-box w-11/12 max-w-2xl"> {/* DaisyUI modal-box for the panel itself */}
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold">Settings</h3>
-                    <button className="btn btn-sm btn-circle btn-ghost" onClick={onClose} title="Close Settings">
-                        <i className="ri-close-line text-xl"></i>
-                    </button>
-                </div>
+        // Changed div to dialog and removed modal-open. Added ref and onCancel/onClose handlers.
+        <dialog ref={dialogRef} className="modal" onClose={handleDialogClose} onCancel={handleDialogClose}>
+            <div className="modal-box w-11/12 max-w-2xl">
+                <form method="dialog"> {/* Optional: form with method="dialog" allows buttons to close the dialog */}
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold">Settings</h3>
+                        {/* This button can now use method="dialog" to close the modal if inside the form */}
+                        <button type="button" className="btn btn-sm btn-circle btn-ghost" onClick={onClose} title="Close Settings">
+                            <i className="ri-close-line text-xl"></i>
+                        </button>
+                    </div>
+                </form> {/* Closing the optional form early if only for the close button */}
 
                 {/* API Key Input */}
                 <div className="form-control mb-4">
@@ -149,11 +173,16 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
 
                 {/* Modal Actions */}
                 <div className="modal-action">
-                    <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+                    {/* Button to close the dialog, can also be part of the form with method="dialog" */}
+                    <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
                     <button className="btn btn-primary" onClick={handleSave}>Save Settings</button>
                 </div>
             </div>
-        </div>
+            {/* Optional: Backdrop click to close, if not using a form with method="dialog" for the main content area */}
+            {/* <form method="dialog" className="modal-backdrop">
+                <button>close</button>
+            </form> */}
+        </dialog>
     );
 };
 

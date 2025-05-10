@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react'; // Added useCallback
 import { ipcRenderer } from 'electron';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -8,6 +8,41 @@ import { Logger } from '../../utils/logger';
 
 // Global set to track terminal IDs for which PTY creation has been requested
 const ptyCreationRequested = new Set<string>();
+
+// Define Xterm.js themes corresponding to DaisyUI themes
+const xtermThemes: Record<string, Partial<import('@xterm/xterm').ITheme>> = {
+  light: {
+    background: '#FFFFFF',
+    foreground: '#374151', // text-gray-700
+    cursor: '#374151',
+    selectionBackground: '#A5B4FC', // indigo-300
+    selectionForeground: '#000000'
+  },
+  dark: {
+    background: '#1F2937', // gray-800
+    foreground: '#D1D5DB', // gray-300
+    cursor: '#F9FAFB', // gray-50
+    selectionBackground: '#4F46E5', // indigo-600
+    selectionForeground: '#FFFFFF'
+  },
+  night: { // A common DaisyUI dark theme
+    background: '#0F172A', // slate-900 (example, adjust to actual 'night' theme background)
+    foreground: '#E2E8F0', // slate-200
+    cursor: '#FFFFFF',
+    selectionBackground: '#38BDF8', // sky-400
+    selectionForeground: '#0F172A'
+  },
+  dracula: {
+    background: '#282A36',
+    foreground: '#F8F8F2',
+    cursor: '#F8F8F2',
+    selectionBackground: '#44475A',
+    selectionForeground: '#F8F8F2'
+  },
+  // Add more themes as needed
+};
+
+const DEFAULT_XTERM_THEME = xtermThemes.night; // Fallback theme
 
 interface TerminalComponentProps {
     terminalId: string;
@@ -24,6 +59,16 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
     const isComponentInitializedRef = useRef(false); 
     const logger = useRef(new Logger(`TerminalComponent[${terminalId}]`)).current;
 
+    const applyXtermTheme = useCallback((themeName?: string | null) => {
+      if (xtermInstanceRef.current) {
+        const selectedTheme = themeName && xtermThemes[themeName] 
+          ? xtermThemes[themeName]
+          : DEFAULT_XTERM_THEME;
+        xtermInstanceRef.current.options.theme = selectedTheme;
+        logger.info(`Applied xterm theme: ${themeName || 'default (night)'}`);
+      }
+    }, [logger]);
+
     useEffect(() => {
         if (!terminalRef.current || isComponentInitializedRef.current) {
             return;
@@ -33,11 +78,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
         logger.info('Initializing component instance...');
 
         const xterm = new Terminal({
-            theme: {
-                background: '#1e1e1e',
-                foreground: '#ffffff',
-                cursor: '#ffffff',
-            },
+            // Theme will be set dynamically
             cursorBlink: true,
             fontSize: 14,
             scrollback: 5000,
@@ -51,6 +92,22 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
         xterm.loadAddon(new WebLinksAddon());
 
         xterm.open(terminalRef.current);
+
+        // Apply initial theme
+        const currentDaisyTheme = document.documentElement.getAttribute('data-theme');
+        applyXtermTheme(currentDaisyTheme);
+        
+        // Observe DaisyUI theme changes
+        const observer = new MutationObserver((mutationsList) => {
+          for (const mutation of mutationsList) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+              const newThemeName = document.documentElement.getAttribute('data-theme');
+              applyXtermTheme(newThemeName);
+            }
+          }
+        });
+
+        observer.observe(document.documentElement, { attributes: true });
         
         const initialFit = () => {
             if (fitAddonRef.current && xtermInstanceRef.current) {
@@ -136,6 +193,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             ipcRenderer.removeAllListeners('terminal:data');
             ipcRenderer.removeAllListeners('terminal:error');
             window.removeEventListener('resize', debouncedResizeHandler);
+            observer.disconnect(); // Disconnect the observer
             if (resizeObserver && terminalRef.current) {
                 resizeObserver.unobserve(terminalRef.current);
             }
@@ -146,7 +204,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             fitAddonRef.current = null;
             isComponentInitializedRef.current = false; 
         };
-    }, [terminalId, onHistoryChange, logger]);
+    }, [terminalId, onHistoryChange, logger, applyXtermTheme]); // Added logger and applyXtermTheme to dependencies
 
     return (
         // Use DaisyUI base color for the terminal container background

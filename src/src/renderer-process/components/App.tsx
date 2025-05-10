@@ -93,7 +93,12 @@ const App: React.FC = () => {
 
     // Render null or a loading state until initial width is set
     if (!initialWidthSet) {
-        return <div ref={appContainerRef} className="flex h-screen">Loading layout...</div>; 
+        // Use a DaisyUI spinner for the loading state
+        return (
+            <div ref={appContainerRef} className="flex h-screen items-center justify-center">
+                <span className="loading loading-spinner loading-lg"></span>
+            </div>
+        );
     }
 
     return (
