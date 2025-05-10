@@ -32,9 +32,9 @@ const store: Store<AppStoreSchemaContents> = new Store<AppStoreSchemaContents>({
 
 // Initialize AI Service
 const aiService = new AIService(
-    store.get('geminiApiKey'),
-    store.get('geminiModelName'),
-    store.get('initialModelInstruction') // Rely on electron-store to use the schema default
+    (store as any).get('geminiApiKey'),
+    (store as any).get('geminiModelName'),
+    (store as any).get('initialModelInstruction') // Rely on electron-store to use the schema default
 );
 
 // Initialize IPC Handlers

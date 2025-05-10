@@ -15,8 +15,8 @@ export function initializeAiIpc(aiService: IAiService, storeInstance: Store<AppS
         { query: string; contextContent: string; contextType: string } // Added contextContent and contextType
     ): Promise<IAIResponse> => {
         try {
-            const apiKey = store.get('geminiApiKey') as string;
-            const modelName = store.get('geminiModelName') as string;
+            const apiKey = (store as any).get('geminiApiKey') as string; // Cast to any for diagnostics
+            const modelName = (store as any).get('geminiModelName') as string;
 
             if (!apiKey) throw new Error('Gemini API key is not set. Please set it in settings.');
             if (!modelName) throw new Error('Gemini Model Name is not set. Please set it in settings.');
@@ -51,13 +51,13 @@ export function initializeAiIpc(aiService: IAiService, storeInstance: Store<AppS
 
     ipcMain.handle('ai:list-models', async () => {
         try {
-            const apiKey = store.get('geminiApiKey') as string;
+            const apiKey = (store as any).get('geminiApiKey') as string;
             if (!apiKey) {
                 logger.warn('Cannot list models: API key is not set in store.');
                 return [];
             }
             if (aiService.getApiKey() !== apiKey) {
-                const currentModel = aiService.getModelName() || store.get('geminiModelName') as string;
+                const currentModel = aiService.getModelName() || (store as any).get('geminiModelName') as string;
                 aiService.updateApiKeyAndModel(apiKey, currentModel); 
             }
             if (!app.isPackaged) {

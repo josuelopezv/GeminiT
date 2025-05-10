@@ -125,3 +125,43 @@ AI_CODING_SESSION_NOTES.md
 *   **React StrictMode & `useEffect`**: Encountered and resolved issues with `useEffect` running twice in development (e.g., double PTY creation), addressed by using a global `Set` to track PTY creation requests for `TerminalComponent`.
 
 The next step in the previous session was to test the application after the major React UI refactoring and to analyze the detailed debug logs for command output cleaning, specifically focusing on the backspace handling in `stripAnsiCodes`.
+
+## 7. Session Update (May 10, 2025)
+
+### 7.1. Achievements & Changes
+
+*   **Resolved `electron-store` TypeScript Errors**:
+    *   Temporarily addressed TS2339 errors (`Property 'get'/'set' does not exist on type 'Store<AppStoreSchemaContents>'`) by casting the store instance to `any` (i.e., `(store as any).get(...)`) in `src/main-process/ipc-handlers/ai-ipc.ts`, `src/main-process/ipc-handlers/settings-ipc.ts`, and `src/main.ts`. This is a workaround pending a more robust typing solution.
+    *   Centralized the `AppStoreSchemaContents` interface into a new file: `src/interfaces/store-schema.interface.ts` to ensure consistency across different parts of the application that interact with `electron-store`.
+*   **DaisyUI Integration and Component Refactoring**:
+    *   **`SettingsPanelComponent.tsx`**: Refactored the modal implementation to use the HTML `<dialog>` element, controlled via its `showModal()` and `close()` methods. This aligns better with DaisyUI's intended usage for modals and simplifies state management. The previous approach of toggling `modal-open` class was less robust.
+    *   **`AiPanelComponent.tsx`**: Enhanced user feedback by adding a loading spinner (DaisyUI `loading` class) to the "Send" button when an AI request is in progress (`isProcessing` state is true).
+    *   **`TerminalComponent.tsx`**: Implemented dynamic Xterm.js theming. The terminal theme now updates automatically when the DaisyUI theme changes (e.g., from light to dark). This is achieved by observing the `data-theme` attribute on the `<html>` element using a `MutationObserver` and applying corresponding Xterm.js theme options.
+*   **Application Build and Execution**: Successfully resolved all build-time errors and confirmed the application launches and runs as expected after the aforementioned refactoring and fixes.
+
+### 7.2. Updated Pending Tasks & Focus
+
+*   **Investigate `electron-store` Typing Issue (High Priority)**: Explore a proper long-term solution for the `electron-store` typings to avoid relying on the `(store as any)` workaround. This might involve checking for updated type definitions, custom declaration merging, or alternative ways to interact with the library that are type-safe.
+*   **Thorough Testing of New Features**:
+    *   Verify the dynamic Xterm.js theming across various DaisyUI themes.
+    *   Test the new `<dialog>` based modal in `SettingsPanelComponent.tsx` for correct behavior (opening, closing, content display).
+    *   Confirm the loading spinner in `AiPanelComponent.tsx` displays correctly during AI processing.
+*   **Reliable Command Output Cleaning (Ongoing)**: This remains a key focus. The previous work on `stripAnsiCodes` and `command-output-capturer.ts` needs to be continued and validated.
+*   **SSH Integration** (Phase 4)
+*   **Multiple Tabs/Sessions** (Phase 4)
+*   **Enhanced Contextual Awareness for AI** (Phase 4)
+*   **Advanced Settings/Customization** (Phase 4)
+*   **Robust Error Handling & UI Polish** (Ongoing)
+*   **Investigate `listModels` SDK Issue** (Lower Priority for now, fallback is working)
+
+### 7.3. Current Code State Summary
+
+*   **Key files modified/created in this session**:
+    *   `src/main.ts` (electron-store fix)
+    *   `src/main-process/ipc-handlers/ai-ipc.ts` (electron-store fix)
+    *   `src/main-process/ipc-handlers/settings-ipc.ts` (electron-store fix)
+    *   `src/interfaces/store-schema.interface.ts` (new file for centralized type)
+    *   `src/renderer-process/components/App.tsx` (minor adjustments if any for DaisyUI theme propagation)
+    *   `src/renderer-process/components/SettingsPanelComponent.tsx` (modal refactor)
+    *   `src/renderer-process/components/AiPanelComponent.tsx` (button loading spinner)
+    *   `src/renderer-process/components/TerminalComponent.tsx` (dynamic Xterm.js theming)

@@ -13,8 +13,8 @@ export function initializeSettingsIpc(storeInstance: Store<AppStoreSchemaContent
     // Use IAiService type
     ipcMain.handle('settings:set-api-key', async (event, apiKey: string) => {
         try {
-            store.set('geminiApiKey', apiKey);
-            aiService.updateApiKeyAndModel(apiKey, store.get('geminiModelName') as string);
+            (store as any).set('geminiApiKey', apiKey);
+            aiService.updateApiKeyAndModel(apiKey, (store as any).get('geminiModelName') as string);
             return { success: true };
         } catch (error) {
             const err = error as Error;
@@ -24,13 +24,13 @@ export function initializeSettingsIpc(storeInstance: Store<AppStoreSchemaContent
     });
 
     ipcMain.handle('settings:get-api-key', async () => {
-        return store.get('geminiApiKey') as string;
+        return (store as any).get('geminiApiKey') as string;
     });
 
     ipcMain.handle('settings:set-model-name', async (event, modelName: string) => {
         try {
-            store.set('geminiModelName', modelName);
-            aiService.updateApiKeyAndModel(store.get('geminiApiKey') as string, modelName);
+            (store as any).set('geminiModelName', modelName);
+            aiService.updateApiKeyAndModel((store as any).get('geminiApiKey') as string, modelName);
             return { success: true };
         } catch (error) {
             const err = error as Error;
@@ -40,16 +40,16 @@ export function initializeSettingsIpc(storeInstance: Store<AppStoreSchemaContent
     });
 
     ipcMain.handle('settings:get-model-name', async () => {
-        return store.get('geminiModelName') as string;
+        return (store as any).get('geminiModelName') as string;
     });
 
     ipcMain.handle('settings:set-initial-model-instruction', async (event, instruction: string) => {
         try {
-            store.set('initialModelInstruction', instruction);
+            (store as any).set('initialModelInstruction', instruction);
             // Also update the AI service with the new instruction
             aiService.updateApiKeyAndModel(
-                store.get('geminiApiKey') as string,
-                store.get('geminiModelName') as string,
+                (store as any).get('geminiApiKey') as string,
+                (store as any).get('geminiModelName') as string,
                 instruction
             );
             return { success: true };
@@ -59,7 +59,7 @@ export function initializeSettingsIpc(storeInstance: Store<AppStoreSchemaContent
             return { success: false, error: err.message };
         }
     });    ipcMain.handle('settings:get-initial-model-instruction', async () => {
-        const value = store.get('initialModelInstruction');
+        const value = (store as any).get('initialModelInstruction');
         return value === undefined ? DEFAULT_INITIAL_MODEL_INSTRUCTION : value;
     });
 }
