@@ -1,9 +1,9 @@
-import { IAiProvider, IChatManager, IAiService as IServiceInterface, IAIResponse as IServiceAIResponse, GenericMessagePart } from './interfaces/ai-service.interface';
+import { IAiProvider, IChatManager, IAIResponse, GenericMessagePart, IChatResponse } from './interfaces/ai-service.interface';
 import { Logger } from './utils/logger';
 
 const logger = new Logger('AIService');
 
-class AIService implements IServiceInterface {
+class AIService {
     private aiProvider: IAiProvider;
     private chatManager: IChatManager | null = null;
     private apiKey: string;
@@ -20,7 +20,7 @@ class AIService implements IServiceInterface {
         logger.info(`AIService initialized with provider: ${aiProvider.getProviderName()}`);
     }
 
-    private initializeOrUpdateChatManager() {
+    private initializeOrUpdateChatManager(): void {
         if (this.apiKey && this.modelName) {
             try {
                 this.chatManager = this.aiProvider.createChatManager(
@@ -39,22 +39,32 @@ class AIService implements IServiceInterface {
         }
     }
 
-    public updateApiKeyAndModel(apiKey: string, modelName: string, newInitialModelInstruction?: string) {
-        const keyChanged = this.apiKey !== apiKey;
-        const modelChanged = this.modelName !== modelName;
-        const instructionChanged = newInitialModelInstruction !== undefined && this.initialModelInstruction !== newInitialModelInstruction;
+    public updateApiKeyAndModel(newApiKey: string, newModelName: string, newInitialModelInstruction?: string): void {
+        logger.info('Updating API key, model, or instruction. Re-initializing chat manager.');
+        this.apiKey = newApiKey;
+        this.modelName = newModelName;
+        this.initialModelInstruction = newInitialModelInstruction || ''; 
+        this.initializeOrUpdateChatManager();
+    }
 
-        this.apiKey = apiKey;
-        this.modelName = modelName;
-        if (newInitialModelInstruction !== undefined) {
-            this.initialModelInstruction = newInitialModelInstruction;
-        }
-
-        if (keyChanged || modelChanged || instructionChanged) {
-            logger.info(`Updating API key, model, or instruction. Re-initializing chat manager.`);
+    public setApiKey(apiKey: string): void {
+        if (this.apiKey !== apiKey) {
+            this.apiKey = apiKey;
             this.initializeOrUpdateChatManager();
-        } else {
-            logger.info('No change in API key, model, or instruction. Chat manager not re-initialized.');
+        }
+    }
+
+    public setModelName(modelName: string): void {
+        if (this.modelName !== modelName) {
+            this.modelName = modelName;
+            this.initializeOrUpdateChatManager();
+        }
+    }
+
+    public setInitialModelInstruction(initialModelInstruction: string): void {
+        if (this.initialModelInstruction !== initialModelInstruction) {
+            this.initialModelInstruction = initialModelInstruction;
+            this.initializeOrUpdateChatManager();
         }
     }
 
@@ -80,7 +90,7 @@ class AIService implements IServiceInterface {
         }
     }
 
-    public async processQuery(query: string, contextContent: string, contextType: string = 'terminal_history'): Promise<IServiceAIResponse> {
+    public async processQuery(query: string, contextContent: string, contextType: string = 'terminal_history'): Promise<IAIResponse> {
         if (!this.chatManager) {
             logger.error('Chat manager is not initialized. Cannot process query.');
             throw new Error('Chat manager is not initialized.');
@@ -106,7 +116,7 @@ class AIService implements IServiceInterface {
                         logger.info('Function call received:', part.functionCall);
                         return {
                             toolCall: {
-                                id: this.currentToolCallId,
+                                id: part.functionCall.name, // Or a more robust ID generation if needed
                                 functionName: part.functionCall.name,
                                 args: part.functionCall.args
                             }
@@ -126,11 +136,16 @@ class AIService implements IServiceInterface {
         }
     }
 
-    public async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IServiceAIResponse> {
+    public async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse> {
         if (!this.chatManager) {
             logger.error('Chat manager is not initialized. Cannot process tool execution result.');
             throw new Error('Chat manager is not initialized.');
         }
+        // Ensure the result being processed matches the current tool call in progress
+        // if (this.currentToolCallId !== toolCallId) {
+        //     logger.error(`Mismatched toolCallId. Expected ${this.currentToolCallId}, got ${toolCallId}`);
+        //     throw new Error('Mismatched toolCallId processing result.');
+        // }
 
         const functionResponseParts: GenericMessagePart[] = [
             { functionResponse: { name: functionName, response: { output: commandOutput } } }
@@ -139,7 +154,7 @@ class AIService implements IServiceInterface {
         try {
             logger.debug('Processing tool execution result with chat manager:', functionResponseParts);
             const chatResponse = await this.chatManager.sendFunctionResponse(functionResponseParts);
-            this.currentToolCallId = null;
+            this.currentToolCallId = null; 
 
             if (chatResponse && chatResponse.candidates && chatResponse.candidates.length > 0) {
                 const candidate = chatResponse.candidates[0];
@@ -155,7 +170,7 @@ class AIService implements IServiceInterface {
             return { text: 'Tool executed, but no further textual response from AI.' };
         } catch (error) {
             logger.error('Error processing tool execution result with chat manager:', error);
-            this.currentToolCallId = null;
+            this.currentToolCallId = null; 
             throw error;
         }
     }

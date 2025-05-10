@@ -1,28 +1,30 @@
 import { ipcMain, app } from 'electron';
 import { IAiService, IAIResponse } from '../../interfaces/ai-service.interface';
-import Store from 'electron-store';
-import { Logger } from '../../utils/logger'; // Import Logger
-import { AppStoreSchemaContents } from '../../interfaces/store-schema.interface'; // Import shared interface
+import { Logger } from '../../utils/logger';
+import { AppStoreManager } from '../app-store-manager'; // Import the AppStoreManager class for type usage
 
-const logger = new Logger('AI_IPC'); // Create a logger instance
+const logger = new Logger('AI_IPC');
 
-export function initializeAiIpc(aiService: IAiService, storeInstance: Store<AppStoreSchemaContents>) {
-    // Use the storeInstance directly, its type already provides typed get/set
-    const store = storeInstance;
+// Update function signature to use the imported AppStoreManager class as type
+export function initializeAiIpc(aiService: IAiService, appStore: AppStoreManager) {
+    // No need to reassign store, use appStore directly
 
     ipcMain.handle('ai:process-query', async (event, 
         { query, contextContent, contextType }: 
-        { query: string; contextContent: string; contextType: string } // Added contextContent and contextType
+        { query: string; contextContent: string; contextType: string }
     ): Promise<IAIResponse> => {
         try {
-            const apiKey = (store as any).get('geminiApiKey') as string; // Cast to any for diagnostics
-            const modelName = (store as any).get('geminiModelName') as string;
+            // Use AppStoreManager to get settings
+            const apiKey = appStore.getGeminiApiKey();
+            const modelName = appStore.getGeminiModelName();
 
             if (!apiKey) throw new Error('Gemini API key is not set. Please set it in settings.');
             if (!modelName) throw new Error('Gemini Model Name is not set. Please set it in settings.');
 
             if (aiService.getApiKey() !== apiKey || aiService.getModelName() !== modelName) {
-                aiService.updateApiKeyAndModel(apiKey, modelName);
+                // Pass the initial instruction from the store as well if it needs to be updated
+                const initialInstruction = appStore.getInitialModelInstruction();
+                aiService.updateApiKeyAndModel(apiKey, modelName, initialInstruction);
             }
 
             if (!app.isPackaged) {
@@ -51,19 +53,22 @@ export function initializeAiIpc(aiService: IAiService, storeInstance: Store<AppS
 
     ipcMain.handle('ai:list-models', async () => {
         try {
-            const apiKey = (store as any).get('geminiApiKey') as string;
+            // Use AppStoreManager to get API key
+            const apiKey = appStore.getGeminiApiKey();
             if (!apiKey) {
                 logger.warn('Cannot list models: API key is not set in store.');
                 return [];
             }
+            // Ensure AI service is using the latest key from store before listing models
             if (aiService.getApiKey() !== apiKey) {
-                const currentModel = aiService.getModelName() || (store as any).get('geminiModelName') as string;
-                aiService.updateApiKeyAndModel(apiKey, currentModel); 
+                const currentModel = appStore.getGeminiModelName(); // Get model from store
+                const initialInstruction = appStore.getInitialModelInstruction(); // Get instruction from store
+                aiService.updateApiKeyAndModel(apiKey, currentModel, initialInstruction); 
             }
             if (!app.isPackaged) {
                 logger.debug('Requesting list of available models...');
             }
-            const models = await aiService.listAvailableModels();
+            const models = await aiService.listAvailableModels(apiKey); // Use the existing apiKey from the store
             if (!app.isPackaged) {
                 logger.debug(`Models received:`, models);
             }

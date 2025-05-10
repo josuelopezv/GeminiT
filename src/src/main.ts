@@ -1,7 +1,10 @@
 import { app } from 'electron';
-import Store, { Schema as ElectronStoreSchema } from 'electron-store';
-import { AppStoreSchemaContents } from './interfaces/store-schema.interface'; // Import shared interface
+// Remove direct electron-store imports if no longer needed here
+// import Store, { Schema as ElectronStoreSchema } from 'electron-store';
+// import { AppStoreSchemaContents } from './interfaces/store-schema.interface'; 
+import appStoreManager from './main-process/app-store-manager'; // Import the new AppStoreManager
 import { AIService } from './ai-service';
+import { GeminiAiProvider } from './ai-providers/gemini-ai-provider'; // Added import
 import { createMainWindow } from './main-process/window-manager';
 import { initializeAppLifecycle } from './main-process/app-lifecycle';
 import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc';
@@ -9,39 +12,28 @@ import { initializeAiIpc } from './main-process/ipc-handlers/ai-ipc';
 import { initializeSettingsIpc } from './main-process/ipc-handlers/settings-ipc';
 import { cleanupPtyProcesses } from './main-process/pty-manager';
 
-const schema: ElectronStoreSchema<AppStoreSchemaContents> = {
-    geminiApiKey: {
-        type: 'string',
-        default: ''
-    },
-    geminiModelName: {
-        type: 'string',
-        default: 'gemini-1.5-flash-latest'
-    },
-    initialModelInstruction: {
-        type: 'string',
-        default: 'You are a helpful AI assistant integrated into a terminal application. When a user asks for a command, or if a command is the most helpful response, provide the command in a markdown code block, specifying the language (e.g., powershell, bash, cmd). If you are providing a command, use the execute_terminal_command tool. Do not use it for other purposes. If the user asks a question about a previous command\'s output, I will provide that output as context.'
-    }  
-};
+// Schema definition is now inside AppStoreManager
+// const schema: ElectronStoreSchema<AppStoreSchemaContents> = { ... };
 
-// Simplify import and explicitly type the store instance
-const store: Store<AppStoreSchemaContents> = new Store<AppStoreSchemaContents>({
-    schema,
-    encryptionKey: 'your-app-secret-key' // Consider a more secure way to handle this
-});
+// Store instantiation is now handled by AppStoreManager
+// const store: Store<AppStoreSchemaContents> = new Store<AppStoreSchemaContents>(...);
 
-// Initialize AI Service
+// Initialize AI Provider
+const geminiAiProvider = new GeminiAiProvider();
+
+// Initialize AI Service using AppStoreManager
 const aiService = new AIService(
-    (store as any).get('geminiApiKey'),
-    (store as any).get('geminiModelName'),
-    (store as any).get('initialModelInstruction') // Rely on electron-store to use the schema default
+    geminiAiProvider,
+    appStoreManager.getGeminiApiKey(), // Use typed getter
+    appStoreManager.getGeminiModelName(), // Use typed getter
+    appStoreManager.getInitialModelInstruction() // Use typed getter
 );
 
 // Initialize IPC Handlers
 initializeTerminalIpc();
-// Explicitly cast store to the specific type when passing
-initializeAiIpc(aiService, store);
-initializeSettingsIpc(store, aiService);
+// Pass appStoreManager to IPC handlers that need it
+initializeAiIpc(aiService, appStoreManager); // Updated to pass appStoreManager
+initializeSettingsIpc(appStoreManager, aiService); // Updated to pass appStoreManager
 
 // Initialize App Lifecycle
 initializeAppLifecycle(() => createMainWindow(cleanupPtyProcesses));
