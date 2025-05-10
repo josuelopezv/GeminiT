@@ -1,9 +1,35 @@
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel, Tool, FunctionDeclaration } from '@google/generative-ai';
 
-interface AIResponse {
-    text: string;
-    suggestedCommand?: string;
+// Updated AIResponse to handle potential tool calls
+export interface AIResponse {
+    text?: string; // For direct text responses from AI
+    toolCall?: {
+        id: string; // ID of the tool call, needed for sending back results
+        functionName: string;
+        args: { command?: string }; // Arguments for the function, e.g., the command to run
+    };
+    // suggestedCommand can be phased out if tool calls become the primary way to suggest commands
+    suggestedCommand?: string; 
 }
+
+const EXECUTE_TERMINAL_COMMAND_TOOL: Tool = {
+    functionDeclarations: [
+        {
+            name: "execute_terminal_command",
+            description: "Executes a shell command in the user's terminal and returns its output. Use this to perform actions or retrieve information from the user's system.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    command: {
+                        type: "STRING",
+                        description: "The terminal command to execute (e.g., 'ls -l', 'git status')."
+                    }
+                },
+                required: ["command"]
+            }
+        } as FunctionDeclaration // Cast to FunctionDeclaration for stricter typing if needed by SDK version
+    ]
+};
 
 const FALLBACK_MODELS = [
     'gemini-1.5-flash-latest',
@@ -121,23 +147,32 @@ class AIService {
             throw new Error('AI Service is not initialized. API key or Model Name may be missing or invalid.');
         }
         try {
-            const prompt = `You are an AI assistant helping with terminal commands.
-            Recent terminal history:
-            ${terminalHistory}
-            
-            User query: ${query}
-            
-            If the user is asking for a command, suggest one and explain what it does.
-            If not, provide a helpful explanation.
-            
-            Format your response as:
-            Explanation: <your explanation>
-            Command: <suggested command if applicable>`;
+            const chat = this.model.startChat({
+                history: [
+                    { role: "user", parts: [{ text: "You are an AI assistant integrated into a terminal. Here is some recent terminal history:\n" + terminalHistory }] },
+                    { role: "model", parts: [{ text: "Understood. I will assist with terminal commands and queries. I can also execute commands if you ask me to and I deem it appropriate by calling the execute_terminal_command tool." }] }
+                ],
+                tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
+            });
 
-            const result = await this.model.generateContent(prompt);
-            const response = await result.response;
+            const result = await chat.sendMessage(query);
+            const response = result.response;
+
+            const functionCalls = response.functionCalls();
+            if (functionCalls && functionCalls.length > 0) {
+                const call = functionCalls[0]; // Assuming one tool call for now
+                console.log('AIService: Received tool call:', JSON.stringify(call));
+                return {
+                    toolCall: {
+                        id: call.name, // The SDK might use call.name or a specific ID field for the call instance
+                        functionName: call.name, // Or ensure this is the actual function name if different
+                        args: call.args as { command?: string } // Type assertion for args
+                    }
+                };
+            }
+
+            // If no tool call, process as text response
             const text = response.text();
-
             const commandMatch = text.match(/Command:\s*(.+)$/m);
             const explanationMatch = text.match(/Explanation:\s*(.+)(?=\nCommand:|$)/s);
 
@@ -145,11 +180,29 @@ class AIService {
                 text: explanationMatch ? explanationMatch[1].trim() : text,
                 suggestedCommand: commandMatch ? commandMatch[1].trim() : undefined
             };
+
         } catch (error) {
-            console.error('AI Service Error:', error);
+            console.error('AI Service processQuery Error:', error);
             throw error;
         }
     }
+
+    // Placeholder for the next step: processing tool execution results
+    async processToolExecutionResult(toolCallId: string, commandOutput: string): Promise<AIResponse> {
+        if (!this.apiKey || !this.modelName || !this.model) {
+            throw new Error('AI Service is not initialized for tool result processing.');
+        }
+        console.log(`AIService: Sending tool execution result for ${toolCallId} with output: ${commandOutput.substring(0,100)}...`);
+        
+        // This will involve sending the tool response back to the model via chat.sendMessage with a functionResponse part
+        // For now, let's return a simple text confirmation
+        // const chat = this.model.startChat(... with history and tools ...);
+        // const result = await chat.sendMessage([{ functionResponse: { name: toolCallId, response: { output: commandOutput } } }]);
+        // const response = result.response.text();
+        // return { text: response };
+
+        return { text: `AI acknowledges output for ${toolCallId}: "${commandOutput.substring(0, 50)}..." Further processing to be implemented.` };
+    }
 }
 
-export { AIService, AIResponse };
+export { AIService }; // AIResponse is already exported at the top

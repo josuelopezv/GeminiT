@@ -237,49 +237,82 @@ aiButton?.addEventListener('click', async () => {
         settingsPanel?.classList.add('visible');
         return;
     }
-    // Ensure currentModelName is up-to-date from the dropdown selection
-    currentModelName = modelNameInput.value; 
+    currentModelName = modelNameInput.value;
     if (!currentModelName) {
         appendMessage('System', 'Please select a Gemini Model Name in settings first.');
         settingsPanel?.classList.add('visible');
-        fetchAndPopulateModels(); // Attempt to load models if not already
+        fetchAndPopulateModels();
         return;
     }
 
     const query = aiInput.value;
     aiInput.value = '';
-
-    // Add user message to output
     appendMessage('User', query);
 
     try {
-        // Send the cleaned terminal history
         const response = await ipcRenderer.invoke('ai:process-query', {
             query,
-            terminalHistory // This is now cleaned history
+            terminalHistory
         });
 
-        appendMessage('AI', response.text);
+        if (response.toolCall) {
+            // Handle tool call from AI
+            const { functionName, args, id: toolCallId } = response.toolCall;
+            if (functionName === 'execute_terminal_command' && args.command) {
+                appendMessage('AI', `Suggested command: \`${args.command}\``);
+                
+                const approvalDiv = document.createElement('div');
+                approvalDiv.className = 'command-approval'; // Add a class for styling
+                approvalDiv.innerHTML = `
+                    <div>Do you want to execute this command?</div>
+                    <div class="command-text">${args.command}</div>
+                    <button class="approve-btn">Approve</button>
+                    <button class="deny-btn">Deny</button>
+                `;
+                aiOutput?.appendChild(approvalDiv);
+                aiOutput?.scrollTo(0, aiOutput.scrollHeight);
 
-        if (response.suggestedCommand) {
-            const commandDiv = document.createElement('div');
-            commandDiv.className = 'suggested-command';
-            commandDiv.innerHTML = `
-                <div class="command-text">${response.suggestedCommand}</div>
-                <button class="execute-btn">Execute</button>
-            `;
-            aiOutput?.appendChild(commandDiv);
+                const approveBtn = approvalDiv.querySelector('.approve-btn');
+                const denyBtn = approvalDiv.querySelector('.deny-btn');
 
-            const executeBtn = commandDiv.querySelector('.execute-btn');
-            executeBtn?.addEventListener('click', () => {
-                ipcRenderer.send('terminal:input', {
-                    id: terminalId,
-                    data: response.suggestedCommand + '\n'
+                approveBtn?.addEventListener('click', () => {
+                    approvalDiv.innerHTML = `<p>Command approved. Executing: \`${args.command}\` (Execution logic pending)</p>`;
+                    // NEXT STEP: Send IPC to main to execute command and provide toolCallId
+                    // ipcRenderer.send('terminal:execute-tool-command', { command: args.command, toolCallId });
+                    console.log(`Command approved by user: ${args.command}, Tool Call ID: ${toolCallId}`);
                 });
-            });
+
+                denyBtn?.addEventListener('click', () => {
+                    approvalDiv.innerHTML = `<p>Command execution denied by user.</p>`;
+                    // Optionally, send a response back to Gemini indicating denial if the flow requires it.
+                });
+
+            } else {
+                appendMessage('AI', 'Received a tool call I don\'t understand.');
+            }
+        } else if (response.text) {
+            // Handle regular text response
+            appendMessage('AI', response.text);
+            if (response.suggestedCommand) { // Legacy suggestion, can be phased out
+                const commandDiv = document.createElement('div');
+                commandDiv.className = 'suggested-command';
+                commandDiv.innerHTML = `
+                    <div class="command-text">${response.suggestedCommand}</div>
+                    <button class="execute-btn">Execute (Legacy)</button>
+                `;
+                aiOutput?.appendChild(commandDiv);
+                const executeBtn = commandDiv.querySelector('.execute-btn');
+                executeBtn?.addEventListener('click', () => {
+                    ipcRenderer.send('terminal:input', {
+                        id: terminalId,
+                        data: response.suggestedCommand + '\n'
+                    });
+                });
+            }
         }
+
     } catch (error) {
-        const err = error as Error; // Explicitly type the error
+        const err = error as Error;
         appendMessage('Error', err.message);
     }
 });
