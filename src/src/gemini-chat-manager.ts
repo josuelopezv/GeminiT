@@ -28,10 +28,12 @@ export class GeminiChatSessionManager implements IChatManager {
     private apiKey: string;
     private modelName: string;
     private chatHistory: Content[] = [];
+    private initialModelInstruction: string;
 
-    constructor(apiKey: string, modelName: string) {
+    constructor(apiKey: string, modelName: string, initialModelInstruction: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
+        this.initialModelInstruction = initialModelInstruction;
         this.initializeSdkAndModel();
     }
 
@@ -70,18 +72,8 @@ export class GeminiChatSessionManager implements IChatManager {
             this.currentChatSession = null;
             return;
         }
-        const initialModelInstruction = `You are a helpful and friendly AI assistant integrated into a terminal application.
-        The user is on Windows 11.
-        Your primary goal is to assist with terminal commands and queries.
-        Instructions for your responses:
-        1. When providing command line examples or code snippets, encapsulate them in markdown code blocks.
-        2. For PowerShell commands, use '\`\`\`powershell' as the language identifier.
-        3. For other shell commands (e.g., cmd, bash), use '\`\`\`sh'.
-        4. ALWAYS provide commands on a single line; do not break them into multiple lines.
-        5. Keep your explanations concise and to the point.
-        6. If you decide to execute a command, you MUST use the 'execute_terminal_command' tool.`; // Keep your detailed prompt
         this.chatHistory = [
-            { role: "user", parts: [{ text: initialModelInstruction }] },
+            { role: "user", parts: [{ text: this.initialModelInstruction }] },
             { role: "model", parts: [{ text: "Understood. I will follow these instructions and use the execute_terminal_command tool when appropriate." }] }
         ];
         this.currentChatSession = this.modelInstance.startChat({
@@ -91,14 +83,19 @@ export class GeminiChatSessionManager implements IChatManager {
         logger.info('New chat session started.');
     }
 
-    public updateCredentials(apiKey: string, modelName: string) {
+    public updateCredentials(apiKey: string, modelName: string, newInitialModelInstruction?: string) {
         const keyChanged = this.apiKey !== apiKey;
         const modelChanged = this.modelName !== modelName;
+        const instructionChanged = newInitialModelInstruction !== undefined && this.initialModelInstruction !== newInitialModelInstruction;
+        
         this.apiKey = apiKey;
         this.modelName = modelName;
+        if (newInitialModelInstruction !== undefined) {
+            this.initialModelInstruction = newInitialModelInstruction;
+        }
 
-        if (keyChanged || modelChanged) {
-            logger.info(`Updating credentials. Key changed: ${keyChanged}, Model changed: ${modelChanged}`);
+        if (keyChanged || modelChanged || instructionChanged) {
+            logger.info(`Updating credentials/instructions. Key changed: ${keyChanged}, Model changed: ${modelChanged}, Instruction changed: ${instructionChanged}`);
             this.initializeSdkAndModel();
         }
     }

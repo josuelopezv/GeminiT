@@ -1,126 +1,179 @@
+import { GoogleGenerativeAI, GenerativeModel, Content, FunctionResponsePart, ChatSession, Part } from '@google/generative-ai'; // Added Part
+import { EXECUTE_TERMINAL_COMMAND_TOOL } from './ai-tools';
 import { fetchModelsFromGoogle } from './google-ai-utils';
-import { GeminiChatSessionManager } from './gemini-chat-manager';
-import { IAiService, IAIResponse, IChatResponse, GenericMessagePart } from './interfaces/ai-service.interface';
-import { Logger } from './utils/logger'; // Import Logger
 
-const logger = new Logger('AIService'); // Create a logger instance
-const MAX_AI_HISTORY_CONTEXT_CHARS = 1000; 
+export interface AIResponse {
+    text?: string;
+    toolCall?: {
+        id: string; 
+        functionName: string;
+        args: { command?: string };
+    };
+    suggestedCommand?: string;
+}
 
-class AIService implements IAiService {
-    private chatManager: GeminiChatSessionManager; 
-    private currentApiKey: string;
-    private currentModelName: string;
+class AIService {
+    private genAI!: GoogleGenerativeAI | null;
+    private model!: GenerativeModel | null;
+    private apiKey: string;
+    private modelName: string;
+    private currentChatSession: ChatSession | null = null; // To store the active chat session
 
     constructor(apiKey: string, modelName: string) {
-        this.currentApiKey = apiKey;
-        this.currentModelName = modelName;
-        this.chatManager = new GeminiChatSessionManager(apiKey, modelName);
-        logger.info(`Initialized with model: ${modelName}`);
+        this.apiKey = apiKey;
+        this.modelName = modelName;
+        if (this.apiKey) {
+            try {
+                this.genAI = new GoogleGenerativeAI(this.apiKey);
+            } catch (error) {
+                console.error('Error initializing GoogleGenerativeAI in constructor:', error);
+                this.genAI = null;
+            }
+        }
+        this.initializeWithKeyAndModel(apiKey, modelName);
     }
 
-    public updateApiKeyAndModel(apiKey: string, modelName: string) {
-        this.currentApiKey = apiKey;
-        this.currentModelName = modelName;
-        this.chatManager.updateCredentials(apiKey, modelName);
-        logger.info(`Updated to model: ${modelName}`);
+    private initializeWithKeyAndModel(apiKey: string, modelName: string) {
+        this.apiKey = apiKey;
+        this.modelName = modelName;
+        this.currentChatSession = null; // Reset chat session
+
+        if (apiKey && !this.genAI) { 
+            try {
+                this.genAI = new GoogleGenerativeAI(apiKey);
+            } catch (error) {
+                console.error('Error initializing GoogleGenerativeAI in initializeWithKeyAndModel:', error);
+                this.genAI = null;
+                this.model = null;
+                return;
+            }
+        }
+        if (this.genAI && modelName) {
+            try {
+                this.model = this.genAI.getGenerativeModel({ model: this.modelName, tools: [EXECUTE_TERMINAL_COMMAND_TOOL] });
+                // Initialize chat session here or when first query is made
+                this.currentChatSession = this.model.startChat({ 
+                    history: [], // Start with empty history, or provide initial context
+                    tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
+                }); 
+            } catch (error) {
+                console.error(`Error initializing AI Service with model ${modelName}:`, error);
+                this.model = null;
+                this.currentChatSession = null;
+            }
+        } else {
+            this.model = null;
+            this.currentChatSession = null;
+        }
     }
 
-    public getApiKey(): string {
-        return this.currentApiKey;
+    updateApiKeyAndModel(apiKey: string, modelName: string) {
+        const oldApiKey = this.apiKey;
+        this.apiKey = apiKey;
+        this.modelName = modelName;
+
+        if (apiKey !== oldApiKey || !this.genAI) {
+            try {
+                this.genAI = new GoogleGenerativeAI(apiKey);
+            } catch (error) {
+                console.error('Error re-initializing GoogleGenerativeAI in updateApiKeyAndModel:', error);
+                this.genAI = null;
+                this.model = null;
+                this.currentChatSession = null;
+                return;
+            }
+        }
+        this.initializeWithKeyAndModel(apiKey, modelName); // This will re-initialize model and chat
     }
 
-    public getModelName(): string {
-        return this.currentModelName;
+    getApiKey(): string {
+        return this.apiKey;
+    }
+
+    getModelName(): string {
+        return this.modelName;
     }
 
     async listAvailableModels(): Promise<string[]> {
-        logger.debug('Listing available models...');
-        return fetchModelsFromGoogle(this.currentApiKey);
+        return fetchModelsFromGoogle(this.apiKey);
     }
 
-    private cleanAndPrepareTerminalHistory(terminalHistory: string): string {
-        let processedHistory = terminalHistory.trim(); 
-        processedHistory = processedHistory.replace(/\r\n/g, '\n'); 
-        const historyLines = processedHistory.split('\n');
-        const trimmedAndNonEmptyLines = historyLines
-            .map(line => line.trim())       
-            .filter(line => line.length > 0); 
-        let condensedHistory = trimmedAndNonEmptyLines.join('\n');
-        condensedHistory = condensedHistory.replace(/\n{2,}/g, '\n'); 
-        if (condensedHistory.length > MAX_AI_HISTORY_CONTEXT_CHARS) {
-            condensedHistory = condensedHistory.slice(-MAX_AI_HISTORY_CONTEXT_CHARS);
-            condensedHistory = "[...trimmed for brevity...]\n" + condensedHistory;
-        }
-        return condensedHistory;
-    }
-
-    async processQuery(query: string, contextContent: string, contextType?: string): Promise<IAIResponse> {
-        let finalContext = contextContent.trim();
-        // Basic normalization, stripAnsiCodes should have handled most complex cases.
-        finalContext = finalContext.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n');
-        if (finalContext.length > MAX_AI_HISTORY_CONTEXT_CHARS) {
-            finalContext = "[...context trimmed for brevity...]\n" + finalContext.slice(-MAX_AI_HISTORY_CONTEXT_CHARS);
-        }
-
-        let fullQueryWithContext = '';
-        if (contextType === "output of the last executed command") {
-            // More direct prompt for command output
-            fullQueryWithContext = `User Query: ${query}\n\nOutput of the previously executed command:\n${finalContext || '(No output was captured)'}`;
-            logger.debug(`[AIService] Using specific command output prompt. Context length: ${finalContext.length}`);
-        } else {
-            fullQueryWithContext = `User Query: ${query}\n\nContext (Source: ${contextType || 'general terminal activity'}):\n${finalContext || '(No context provided)'}`;
-            logger.debug(`[AIService] Using general context prompt. Context length: ${finalContext.length}`);
+    async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {
+        if (!this.currentChatSession) {
+            // Attempt to re-initialize if session is missing but model/key are present
+            if (this.model && this.apiKey && this.modelName) {
+                console.warn('AIService: Chat session was null, attempting to re-initialize.');
+                this.currentChatSession = this.model.startChat({
+                    history: [], // Or some predefined initial history
+                    tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
+                });
+            } else {
+                 throw new Error('AI Service chat session is not initialized. API key or Model Name may be missing or invalid.');
+            }
         }
         
-        if (!require('electron').app.isPackaged) {
-            // Already logged above with more detail
-            // logger.debug(`[AIService] Context for AI Prompt (type: ${contextType}, ${finalContext.length} chars):`, finalContext);
-        }
-
-        const queryMessageParts: GenericMessagePart[] = [{ text: fullQueryWithContext }];
-
-        // ... (rest of processQuery method: try/catch block with chatManager.sendMessage, response parsing) ...
         try {
-            const chatManagerResponse: IChatResponse | null = await this.chatManager.sendMessage(queryMessageParts);
+            // Construct message parts, including terminal history if relevant for this turn
+            const messageParts: Part[] = [{ text: query }];
+            if (terminalHistory) {
+                // Consider how to best present terminal history. Appending to query or as separate context.
+                // For now, let's assume it's part of the user's broader context for the query.
+                // messageParts.unshift({ text: "Terminal Context:\n" + terminalHistory + "\n\nUser Query:" });
+            }
 
-            if (!chatManagerResponse) {
-                throw new Error('Received null response from ChatManager.sendMessage');
-            }
-            if (!chatManagerResponse.candidates || chatManagerResponse.candidates.length === 0) {
-                logger.warn('AIService.processQuery: No candidates found in chat manager response.');
-                return { text: "[AI did not provide a response candidate]" };
-            }
-            const candidate = chatManagerResponse.candidates[0];
-            if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-                logger.warn('AIService.processQuery: No parts found in response candidate content.');
-                return { text: "[AI response candidate had no content parts]" };
-            }
-            let combinedText = '';
-            for (const part of candidate.content.parts) {
-                if (part.functionCall && part.functionCall.name === 'execute_terminal_command') {
-                    logger.info('AIService: Gemini proposed a tool call (execute_terminal_command):', part.functionCall.args);
-                    const commandToSuggest = (part.functionCall.args as { command?: string }).command;
-                    if (commandToSuggest) {
-                        combinedText += `The AI suggests executing the following command:\n\`\`\`sh\n${commandToSuggest}\n\`\`\`\n`;
-                    } else {
-                        combinedText += "The AI considered executing a command but didn\'t specify which one.\n";
+            const result = await this.currentChatSession.sendMessage(messageParts);
+            const response = result.response;
+
+            const functionCalls = response.functionCalls();
+            if (functionCalls && functionCalls.length > 0) {
+                const call = functionCalls[0];
+                return {
+                    toolCall: {
+                        id: call.name, // This should be the unique ID of the function call
+                        functionName: call.name, 
+                        args: call.args as { command?: string }
                     }
-                } else if (part.text) {
-                    combinedText += part.text;
-                }
+                };
             }
-            return { text: combinedText.trim() };
+
+            const text = response.text();
+            return { text };
+
         } catch (error) {
-            logger.error('AIService.processQuery Error:', error);
+            console.error('AI Service processQuery Error:', error);
+            // If sendMessage fails, the chat session might be in a bad state. 
+            // Consider resetting or re-initializing the chat session on certain errors.
+            // this.currentChatSession = null; // Or re-initialize
             throw error;
         }
     }
 
-    // processToolExecutionResult is now effectively unused with this new approach.
-    // We can comment it out or remove it later.
-    async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse> {
-        logger.warn('AIService.processToolExecutionResult called, but this flow is deprecated with the new approach.');
-        return { text: `Command output processing is deprecated in this flow. Output was: ${commandOutput.substring(0,100)}...` };
+    async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<AIResponse> {
+        if (!this.currentChatSession) {
+            throw new Error('AI Service chat session is not initialized for tool result processing.');
+        }
+        console.log(`AIService: Sending tool execution result for ${functionName} (ID: ${toolCallId})`);
+        
+        try {
+            const functionResponsePart: FunctionResponsePart = {
+                functionResponse: {
+                    name: functionName, 
+                    response: { name: functionName, content: { output: commandOutput } }, 
+                }
+            };
+            
+            // Send the function response part using the existing chat session
+            const result = await this.currentChatSession.sendMessage([functionResponsePart]);
+            const response = result.response;
+
+            const text = response.text();
+            return { text };
+
+        } catch (error) {
+            console.error('AI Service processToolExecutionResult Error:', error);
+            // Consider chat session state here too
+            throw error; // Re-throw so renderer can display a generic error
+        }
     }
 }
 
