@@ -15,10 +15,15 @@
     "src/ai-service.ts", // ai-service is used by the main process
     "src/ai-tools.ts",         // Added
     "src/google-ai-utils.ts",  // Added
-    "src/main-process/**/*.ts" // Include all .ts files in main-process and its subdirectories
+    "src/gemini-chat-session-manager.ts", // Added new chat manager
+    "src/utils/string-utils.ts", // Added shared utility
+    "src/utils/logger.ts", // Explicitly added logger.ts
+    "src/main-process/**/*.ts" // This already includes command-output-capturer.ts if it's in main-process
   ],
   "exclude": [
-    "src/renderer.ts", // Exclude renderer process files from this config
+    "src/renderer.tsx", // Changed from .ts to .tsx
+    "src/renderer-process/**/*.ts", // Exclude all renderer process files
+    "src/renderer-process/**/*.tsx", // Exclude all renderer process files
     "node_modules",
     "dist"
   ]

@@ -1,0 +1,68 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+@import 'remixicon/fonts/remixicon.css';
+
+/* Base body styles - DaisyUI themes will override these if they target body directly */
+body {
+  @apply bg-white text-gray-800;
+}
+
+/* 
+  DaisyUI themes are applied via data-theme on <html>.
+  If a DaisyUI theme (like 'night') sets body background and text, 
+  the .dark body styles might not be strictly necessary but can serve as a fallback 
+  or for elements not covered by DaisyUI components.
+*/
+.dark body {
+  @apply bg-gray-900 text-gray-200; /* Fallback if DaisyUI theme doesn't cover body */
+}
+
+/* Custom scrollbar styles - Retained as DaisyUI doesn't style scrollbars extensively by default */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  /* Use DaisyUI variables or Tailwind classes that respect DaisyUI themes if possible */
+  /* For now, keeping explicit dark mode styling for scrollbars */
+  @apply bg-gray-200 dark:bg-gray-700 rounded-md;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-400 dark:bg-gray-500 rounded-md;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500 dark:bg-gray-400;
+}
+
+/* For Firefox - Retained */
+* {
+  scrollbar-width: thin;
+  /* These will be overridden by DaisyUI theme variables for themed elements */
+  scrollbar-color: theme('colors.gray.400') theme('colors.gray.200');
+}
+
+.dark * {
+  scrollbar-color: theme('colors.gray.500') theme('colors.gray.700');
+}
+
+/* Ensure root and body take full height for layout - Retained */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-y: hidden; /* Prevent body scroll, components will manage their own scroll */
+}
+
+/* 
+  The following styles for #terminal-container, #ai-panel, #settings-btn, 
+  #settings-panel, .settings-group, #ai-output, #ai-input, 
+  .suggested-command, .command-approval are now largely handled by 
+  DaisyUI component classes and Tailwind utilities applied directly in the JSX. 
+  They can be removed to avoid conflicts and rely on DaisyUI's styling.
+*/
+
+/* Specific xterm.js theme is set in TerminalComponent.tsx, not here */

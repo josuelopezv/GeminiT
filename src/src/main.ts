@@ -51,3 +51,19 @@ app.on('before-quit', () => {
     console.log('Application is about to quit. Cleaning up...');
     cleanupPtyProcesses();
 });
+
+// Graceful shutdown for uncaught exceptions or signals (optional but good practice)
+process.on('uncaughtException', (error) => {
+    cleanupPtyProcesses();
+    app.quit(); // Force quit on unhandled exception
+});
+
+process.on('SIGINT', () => {
+    cleanupPtyProcesses();
+    app.quit();
+});
+
+process.on('SIGTERM', () => {
+    cleanupPtyProcesses();
+    app.quit();
+});

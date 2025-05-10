@@ -6,7 +6,8 @@
     "start": "npm run build && electron .",
     "build": "tsc -p tsconfig.main.json && webpack",
     "watch": "webpack --watch",
-    "dev": "npm run build && electron ."
+    "dev": "npm run build && electron .",
+    "test:e2e": "npx playwright test"
   },
   "keywords": [],
   "author": "",
@@ -18,15 +19,27 @@
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
     "electron-store": "^9.0.0",
-    "node-pty": "github:microsoft/node-pty"
+    "node-pty": "github:microsoft/node-pty",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remixicon": "^4.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.45.3",
     "@types/electron": "^1.4.38",
     "@types/node": "^22.15.17",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
     "css-loader": "^7.1.2",
+    "daisyui": "^5.0.35",
     "electron": "^36.2.0",
     "electron-builder": "^26.0.12",
+    "playwright": "^1.45.3",
+    "postcss": "^8.4.40",
+    "postcss-loader": "^8.1.1",
     "style-loader": "^4.0.0",
+    "tailwindcss": "^3.4.7",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.3",
     "webpack": "^5.99.8",
