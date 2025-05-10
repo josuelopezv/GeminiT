@@ -14,11 +14,10 @@ async function captureOutputForCommand(
     terminalId: string, // For writeToPty
     command: string, // The user's command
     shellType: 'powershell.exe' | 'bash',
-    captureRunId: string // Changed from toolCallId to avoid confusion, this is for this specific capture
+    captureRunId: string, // For logging and context
+    startMarker: string, // Passed in from caller
+    endMarker: string    // Passed in from caller
 ): Promise<{ output?: string; error?: string }> {
-    const startMarker = `__CMD_OUTPUT_START_${Date.now()}_${captureRunId}__`;
-    const endMarker = `__CMD_OUTPUT_END_${Date.now()}_${captureRunId}__`;
-    
     let commandToExecuteWithMarkers = '';
 
     if (shellType === 'powershell.exe') {
@@ -178,9 +177,15 @@ export function initializeTerminalIpc() {
             return { error: 'PTY process not found' };
         }
 
-        // Use a unique ID for this capture operation (e.g., based on timestamp or a simple counter)
-        const captureId = `capture_${Date.now()}`;
-        const result = await captureOutputForCommand(ptyProcess, terminalId, command, shellType, captureId);
+        const now = Date.now();
+        const captureOpId = `${terminalId}_op_${now}`; // Unique ID for this entire capture operation context
+
+        // Define markers here and pass them down
+        const startMarker = `__CMD_OUTPUT_START_${captureOpId}__`;
+        const endMarker = `__CMD_OUTPUT_END_${captureOpId}__`;
+        
+        // Pass captureOpId for logging/context AND the generated markers
+        const result = await captureOutputForCommand(ptyProcess, terminalId, command, shellType, captureOpId, startMarker, endMarker);
         return result; // Contains { output?: string, error?: string }
     });
 }

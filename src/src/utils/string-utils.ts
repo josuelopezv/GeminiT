@@ -15,8 +15,8 @@ export function stripAnsiCodes(str: string): string {
     // logger.info('stripAnsiCodes function CALLED.'); // This can also be noisy for every call
     logger.debug(`[stripAnsiCodes INPUT]:`, str);
     
-    // Regex for ANSI escape codes (CSI sequences)
-    const ansiRegex = /[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+    // Regex for ANSI escape codes (CSI sequences) - Updated to include @-~ for final byte
+    const ansiRegex = /[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[@-~]/g;
     let cleanedStr = str.replace(ansiRegex, '');
     
     // Regex for OSC (Operating System Command) sequences (ESC ] ... BEL or ESC \)
