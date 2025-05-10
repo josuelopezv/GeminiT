@@ -96,7 +96,8 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
     return (
         // Changed div to dialog and removed modal-open. Added ref and onCancel/onClose handlers.
         <dialog ref={dialogRef} className="modal" onClose={handleDialogClose} onCancel={handleDialogClose}>
-            <div className="modal-box w-11/12 max-w-2xl">
+            {/* Added text-base-content to ensure text contrasts with modal background */}
+            <div className="modal-box w-11/12 max-w-2xl text-base-content">
                 <form method="dialog"> {/* Optional: form with method="dialog" allows buttons to close the dialog */}
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-bold">Settings</h3>
@@ -121,20 +122,24 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
                     />
                 </div>
 
-                {/* Model Name Input with Fetch Button */}
+                {/* Model Name Dropdown with Fetch Button */}
                 <div className="form-control mb-4">
                     <label className="label">
                         <span className="label-text">Model Name</span>
                     </label>
-                    <div className="join w-full"> {/* DaisyUI join for grouping input and button */}
-                        <input 
-                            type="text" 
-                            placeholder="e.g., gemini-1.5-flash-latest"
-                            className="input input-bordered join-item w-full" // DaisyUI input and join-item
+                    <div className="join w-full"> {/* DaisyUI join for grouping select and button */}
+                        <select 
+                            className="select select-bordered join-item w-full" // DaisyUI select and join-item
                             value={modelName}
                             onChange={(e) => setModelName(e.target.value)}
-                            list="available-models-list"
-                        />
+                            disabled={isLoadingModels || availableModels.length === 0}
+                        >
+                            {availableModels.length === 0 && !isLoadingModels && <option value="" disabled>No models loaded. Fetch first.</option>}
+                            {availableModels.length === 0 && isLoadingModels && <option value="" disabled>Loading models...</option>}
+                            {availableModels.map(model => (
+                                <option key={model} value={model}>{model}</option>
+                            ))}
+                        </select>
                         <button 
                             className={`btn join-item ${isLoadingModels ? 'btn-disabled' : 'btn-neutral'}`} // DaisyUI button and join-item
                             onClick={handleFetchModels}
@@ -143,13 +148,9 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
                             {isLoadingModels ? <span className="loading loading-spinner loading-xs"></span> : 'Fetch Models'}
                         </button>
                     </div>
-                    {availableModels.length > 0 && (
-                        <datalist id="available-models-list">
-                            {availableModels.map(model => <option key={model} value={model} />)}
-                        </datalist>
-                    )}
+                    {/* Datalist and input with list attribute are no longer needed */}
                     <label className="label">
-                        <span className="label-text-alt">Enter model name or fetch from API.</span>
+                        <span className="label-text-alt">Select a model from the list. Use 'Fetch Models' if the list is empty or needs update.</span>
                     </label>
                 </div>
 

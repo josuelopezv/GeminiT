@@ -70,47 +70,25 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
     }, [logger]);
 
     useEffect(() => {
-        if (!terminalRef.current || isComponentInitializedRef.current) {
+        if (!terminalRef.current) {
+            logger.warn('Terminal ref is null at the start of useEffect.');
             return;
         }
-        isComponentInitializedRef.current = true;
+        if (isComponentInitializedRef.current) {
+            logger.info('Component already initialized, skipping useEffect run.');
+            return;
+        }
 
-        logger.info('Initializing component instance...');
+        let animationFrameId: number;
+        let initialFitTimeoutId: NodeJS.Timeout | undefined;
+        let resizeTimeoutId: NodeJS.Timeout | undefined;
+        let themeObserver: MutationObserver | undefined;
+        let terminalResizeObserver: ResizeObserver | null = null;
 
-        const xterm = new Terminal({
-            // Theme will be set dynamically
-            cursorBlink: true,
-            fontSize: 14,
-            scrollback: 5000,
-            convertEol: true,
-        });
-        xtermInstanceRef.current = xterm;
-
-        const fitAddonInstance = new FitAddon();
-        fitAddonRef.current = fitAddonInstance;
-        xterm.loadAddon(fitAddonInstance);
-        xterm.loadAddon(new WebLinksAddon());
-
-        xterm.open(terminalRef.current);
-
-        // Apply initial theme
-        const currentDaisyTheme = document.documentElement.getAttribute('data-theme');
-        applyXtermTheme(currentDaisyTheme);
-        
-        // Observe DaisyUI theme changes
-        const observer = new MutationObserver((mutationsList) => {
-          for (const mutation of mutationsList) {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-              const newThemeName = document.documentElement.getAttribute('data-theme');
-              applyXtermTheme(newThemeName);
-            }
-          }
-        });
-
-        observer.observe(document.documentElement, { attributes: true });
-        
-        const initialFit = () => {
-            if (fitAddonRef.current && xtermInstanceRef.current) {
+        // Define performFit and debouncedResizeHandler here so they are accessible for cleanup
+        // and can be defined before being used in requestAnimationFrame.
+        const performFit = () => {
+            if (fitAddonRef.current && xtermInstanceRef.current && terminalRef.current && terminalRef.current.offsetParent !== null) {
                 try {
                     fitAddonRef.current.fit();
                     ipcRenderer.send('terminal:resize', { 
@@ -118,93 +96,135 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
                         cols: xtermInstanceRef.current.cols, 
                         rows: xtermInstanceRef.current.rows 
                     });
+                    logger.info(`Terminal resized to: ${xtermInstanceRef.current.cols}x${xtermInstanceRef.current.rows}`);
                 } catch (e) {
                     logger.error("Error during fitAddon.fit():", e);
                 }
+            } else {
+                logger.warn('Skipping fit, terminal not ready or not visible.');
             }
         };
 
-        const initialFitTimeout = setTimeout(() => {
-            initialFit();
-            xterm.focus();
-        }, 50);
-
-        // Only send terminal:create if it hasn't been sent for this terminalId yet
-        if (!ptyCreationRequested.has(terminalId)) {
-            ipcRenderer.send('terminal:create', terminalId);
-            ptyCreationRequested.add(terminalId);
-            logger.info('terminal:create IPC sent.');
-        } else {
-            logger.info('terminal:create IPC already sent for this ID, skipping.');
-        }
-
-        const handleTerminalData = (event: Electron.IpcRendererEvent, { id, data }: { id: string; data: string }) => {
-            if (id === terminalId && xtermInstanceRef.current) {
-                xtermInstanceRef.current.write(data);
-                const cleanedData = stripAnsiCodes(data);
-                localTerminalHistoryRef.current += cleanedData;
-                if (localTerminalHistoryRef.current.length > MAX_HISTORY_LENGTH) {
-                    localTerminalHistoryRef.current = localTerminalHistoryRef.current.slice(-MAX_HISTORY_LENGTH);
-                }
-                onHistoryChange(localTerminalHistoryRef.current);
-            }
-        };
-
-        const handleTerminalError = (event: Electron.IpcRendererEvent, { id, error }: { id: string; error: string }) => {
-            if (id === terminalId && xtermInstanceRef.current) {
-                logger.warn(`Received terminal error:`, error);
-                xtermInstanceRef.current.write(`\r\n\x1b[31mError: ${error}\x1b[0m\r\n`);
-            }
-        };
-
-        ipcRenderer.on('terminal:data', handleTerminalData);
-        ipcRenderer.on('terminal:error', handleTerminalError);
-
-        // Debounced resize handler for both window and element resize
-        let resizeTimeout: NodeJS.Timeout;
         const debouncedResizeHandler = () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(initialFit, 100); // Reuse initialFit which calls fit() and sends IPC
+            if (resizeTimeoutId) clearTimeout(resizeTimeoutId);
+            resizeTimeoutId = setTimeout(performFit, 100);
         };
 
-        // Listen to window resize
-        window.addEventListener('resize', debouncedResizeHandler);
+        animationFrameId = requestAnimationFrame(() => {
+            if (!terminalRef.current) { 
+                logger.warn('Terminal ref became null before animation frame execution.');
+                return;
+            }
+            // Redundant check if outer check is sufficient, but safe
+            if (isComponentInitializedRef.current && xtermInstanceRef.current) {
+                 logger.info('Initialization logic inside animationFrame found component already initialized.');
+                 performFit(); // Ensure fit if somehow re-entered and initialized
+                 xtermInstanceRef.current.focus();
+                 return;
+            }
 
-        // Use ResizeObserver to detect changes to the terminal container's size
-        let resizeObserver: ResizeObserver | null = null;
-        if (terminalRef.current) {
-            resizeObserver = new ResizeObserver(debouncedResizeHandler);
-            resizeObserver.observe(terminalRef.current);
-        }
-        
-        // Initial resize call
-        const initialResizeTimeout = setTimeout(initialFit, 100);
+            isComponentInitializedRef.current = true;
+            logger.info('Initializing component instance (after animation frame)...');
 
-        xterm.onData((data: string) => {
-            logger.debug(`xterm.onData - Sending data to main:`, data); // New log
-            ipcRenderer.send('terminal:input', { id: terminalId, data });
+            const xterm = new Terminal({
+                cursorBlink: true,
+                fontSize: 14,
+                scrollback: 5000,
+                convertEol: true,
+            });
+            xtermInstanceRef.current = xterm;
+
+            const fitAddonInstance = new FitAddon();
+            fitAddonRef.current = fitAddonInstance;
+            xterm.loadAddon(fitAddonInstance);
+            xterm.loadAddon(new WebLinksAddon());
+
+            xterm.open(terminalRef.current); // Critical call, now deferred
+
+            const currentDaisyTheme = document.documentElement.getAttribute('data-theme');
+            applyXtermTheme(currentDaisyTheme);
+            
+            themeObserver = new MutationObserver((mutationsList) => {
+              for (const mutation of mutationsList) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+                  const newThemeName = document.documentElement.getAttribute('data-theme');
+                  applyXtermTheme(newThemeName);
+                }
+              }
+            });
+            themeObserver.observe(document.documentElement, { attributes: true });
+            
+            initialFitTimeoutId = setTimeout(() => {
+                performFit();
+                if (xtermInstanceRef.current) {
+                    xtermInstanceRef.current.focus();
+                }
+            }, 100); // Delay after open and theme application
+
+            if (!ptyCreationRequested.has(terminalId)) {
+                ipcRenderer.send('terminal:create', terminalId);
+                ptyCreationRequested.add(terminalId);
+                logger.info('terminal:create IPC sent.');
+            } else {
+                logger.info('terminal:create IPC already sent for this ID, skipping.');
+            }
+
+            const handleTerminalData = (event: Electron.IpcRendererEvent, { id, data }: { id: string; data: string }) => {
+                if (id === terminalId && xtermInstanceRef.current) {
+                    xtermInstanceRef.current.write(data);
+                    const cleanedData = stripAnsiCodes(data);
+                    localTerminalHistoryRef.current += cleanedData;
+                    if (localTerminalHistoryRef.current.length > MAX_HISTORY_LENGTH) {
+                        localTerminalHistoryRef.current = localTerminalHistoryRef.current.slice(-MAX_HISTORY_LENGTH);
+                    }
+                    onHistoryChange(localTerminalHistoryRef.current);
+                }
+            };
+    
+            const handleTerminalError = (event: Electron.IpcRendererEvent, { id, error }: { id: string; error: string }) => {
+                if (id === terminalId && xtermInstanceRef.current) {
+                    logger.warn(`Received terminal error:`, error);
+                    xtermInstanceRef.current.write(`\r\n\x1b[31mError: ${error}\x1b[0m\r\n`);
+                }
+            };
+    
+            ipcRenderer.on('terminal:data', handleTerminalData);
+            ipcRenderer.on('terminal:error', handleTerminalError);
+    
+            window.addEventListener('resize', debouncedResizeHandler);
+    
+            if (terminalRef.current) {
+                terminalResizeObserver = new ResizeObserver(debouncedResizeHandler);
+                terminalResizeObserver.observe(terminalRef.current);
+            }
+            
+            xterm.onData((data: string) => {
+                logger.debug(`xterm.onData - Sending data to main:`, data);
+                ipcRenderer.send('terminal:input', { id: terminalId, data });
+            });
         });
 
         return () => {
-            logger.info('Cleaning up component instance...');
-            clearTimeout(initialFitTimeout);
-            clearTimeout(initialResizeTimeout);
-            clearTimeout(resizeTimeout);
+            logger.info('Cleaning up TerminalComponent instance...');
+            cancelAnimationFrame(animationFrameId);
+            if (initialFitTimeoutId) clearTimeout(initialFitTimeoutId);
+            if (resizeTimeoutId) clearTimeout(resizeTimeoutId);
+            
             ipcRenderer.removeAllListeners('terminal:data');
             ipcRenderer.removeAllListeners('terminal:error');
+            
             window.removeEventListener('resize', debouncedResizeHandler);
-            observer.disconnect(); // Disconnect the observer
-            if (resizeObserver && terminalRef.current) {
-                resizeObserver.unobserve(terminalRef.current);
+            if (themeObserver) themeObserver.disconnect();
+            if (terminalResizeObserver && terminalRef.current) {
+                terminalResizeObserver.unobserve(terminalRef.current);
             }
             if (xtermInstanceRef.current) {
                 xtermInstanceRef.current.dispose();
                 xtermInstanceRef.current = null;
             }
-            fitAddonRef.current = null;
-            isComponentInitializedRef.current = false; 
+            // isComponentInitializedRef.current = false; // Consider if needed for re-runs
         };
-    }, [terminalId, onHistoryChange, logger, applyXtermTheme]); // Added logger and applyXtermTheme to dependencies
+    }, [terminalId, applyXtermTheme, logger, onHistoryChange]); // Added onHistoryChange to dependencies
 
     return (
         // Use DaisyUI base color for the terminal container background
