@@ -54,22 +54,29 @@ class AIService implements IAiService {
         return condensedHistory;
     }
 
-    async processQuery(query: string, contextContent: string, contextType: string = "general terminal activity"): Promise<IAIResponse> {
-        // The cleanAndPrepareTerminalHistory is now expected to be done by the caller if it's general history.
-        // If contextContent is specific command output, it might already be clean or need different cleaning.
-        // For now, assume contextContent is reasonably clean.
-        
+    async processQuery(query: string, contextContent: string, contextType?: string): Promise<IAIResponse> {
         let finalContext = contextContent.trim();
+        // Basic normalization, stripAnsiCodes should have handled most complex cases.
         finalContext = finalContext.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n');
         if (finalContext.length > MAX_AI_HISTORY_CONTEXT_CHARS) {
             finalContext = "[...context trimmed for brevity...]\n" + finalContext.slice(-MAX_AI_HISTORY_CONTEXT_CHARS);
         }
 
+        let fullQueryWithContext = '';
+        if (contextType === "output of the last executed command") {
+            // More direct prompt for command output
+            fullQueryWithContext = `User Query: ${query}\n\nOutput of the previously executed command:\n${finalContext || '(No output was captured)'}`;
+            logger.debug(`[AIService] Using specific command output prompt. Context length: ${finalContext.length}`);
+        } else {
+            fullQueryWithContext = `User Query: ${query}\n\nContext (Source: ${contextType || 'general terminal activity'}):\n${finalContext || '(No context provided)'}`;
+            logger.debug(`[AIService] Using general context prompt. Context length: ${finalContext.length}`);
+        }
+        
         if (!require('electron').app.isPackaged) {
-            logger.debug(`[AIService] Context for AI Prompt (type: ${contextType}, ${finalContext.length} chars):`, finalContext);
+            // Already logged above with more detail
+            // logger.debug(`[AIService] Context for AI Prompt (type: ${contextType}, ${finalContext.length} chars):`, finalContext);
         }
 
-        const fullQueryWithContext = `User Query: ${query}\n\nContext (Source: ${contextType}):\n${finalContext || '(No context provided)'}`;
         const queryMessageParts: GenericMessagePart[] = [{ text: fullQueryWithContext }];
 
         // ... (rest of processQuery method: try/catch block with chatManager.sendMessage, response parsing) ...

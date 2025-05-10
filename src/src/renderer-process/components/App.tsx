@@ -94,9 +94,13 @@ const App: React.FC = () => {
     }
 
     return (
-        <div ref={appContainerRef} className="flex h-screen font-sans bg-gray-800 overflow-hidden">
+        // DaisyUI themes apply to the html tag, so child elements will inherit themed styles.
+        // We can remove explicit dark:bg-gray-900 if the DaisyUI theme handles the body background.
+        // The `font-sans` and `overflow-hidden` are still good.
+        <div ref={appContainerRef} className="flex h-screen font-sans overflow-hidden">
             {/* Terminal Panel Wrapper */}
-            <div className="flex-1 p-1 bg-gray-900 min-w-0 overflow-auto"> 
+            {/* DaisyUI themes might provide a base color, adjust if needed or use DaisyUI component like Card */}
+            <div className="flex-1 p-1 bg-base-200 min-w-0 overflow-auto"> 
                 <TerminalComponent 
                     terminalId={terminalId} 
                     onHistoryChange={handleTerminalHistoryChange} 
@@ -104,15 +108,17 @@ const App: React.FC = () => {
             </div>
 
             {/* Splitter Handle */}
+            {/* Using DaisyUI neutral color for the splitter */}
             <div 
-                className="w-2 bg-gray-600 hover:bg-blue-700 cursor-col-resize flex-shrink-0"
+                className="w-2 bg-neutral hover:bg-neutral-focus cursor-col-resize flex-shrink-0"
                 onMouseDown={handleMouseDownOnSplitter}
                 title="Resize AI Panel"
             ></div>
 
             {/* AI Panel Wrapper */}
+            {/* Using DaisyUI base-100 or base-200 for panel background */}
             <div 
-                className="flex-shrink-0 p-0 bg-gray-700 overflow-auto" 
+                className="flex-shrink-0 p-0 bg-base-100 overflow-auto" 
                 style={{ width: `${aiPanelWidth}px` }} 
             >
                 <AiPanelComponent 

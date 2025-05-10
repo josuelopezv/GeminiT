@@ -52,21 +52,23 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
 
         xterm.open(terminalRef.current);
         
-        const initialFitTimeout = setTimeout(() => {
-            if (fitAddonRef.current) {
+        const initialFit = () => {
+            if (fitAddonRef.current && xtermInstanceRef.current) {
                 try {
                     fitAddonRef.current.fit();
-                    if (xtermInstanceRef.current) {
-                         ipcRenderer.send('terminal:resize', { 
-                            id: terminalId, 
-                            cols: xtermInstanceRef.current.cols, 
-                            rows: xtermInstanceRef.current.rows 
-                        });
-                    }
+                    ipcRenderer.send('terminal:resize', { 
+                        id: terminalId, 
+                        cols: xtermInstanceRef.current.cols, 
+                        rows: xtermInstanceRef.current.rows 
+                    });
                 } catch (e) {
-                    logger.error("Error during initial fitAddon.fit():", e);
+                    logger.error("Error during fitAddon.fit():", e);
                 }
             }
+        };
+
+        const initialFitTimeout = setTimeout(() => {
+            initialFit();
             xterm.focus();
         }, 50);
 
@@ -101,28 +103,25 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
         ipcRenderer.on('terminal:data', handleTerminalData);
         ipcRenderer.on('terminal:error', handleTerminalError);
 
-        const handleResize = () => {
-            if (fitAddonRef.current && xtermInstanceRef.current && terminalRef.current) {
-                try {
-                    fitAddonRef.current.fit();
-                    ipcRenderer.send('terminal:resize', { 
-                        id: terminalId, 
-                        cols: xtermInstanceRef.current.cols, 
-                        rows: xtermInstanceRef.current.rows 
-                    });
-                } catch (e) {
-                    logger.error("Error during handleResize fitAddon.fit():", e);
-                }
-            }
+        // Debounced resize handler for both window and element resize
+        let resizeTimeout: NodeJS.Timeout;
+        const debouncedResizeHandler = () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(initialFit, 100); // Reuse initialFit which calls fit() and sends IPC
         };
 
-        let resizeTimeout: NodeJS.Timeout;
-        const debouncedResize = () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(handleResize, 100);
-        };
-        window.addEventListener('resize', debouncedResize);
-        const initialResizeTimeout = setTimeout(handleResize, 100);
+        // Listen to window resize
+        window.addEventListener('resize', debouncedResizeHandler);
+
+        // Use ResizeObserver to detect changes to the terminal container's size
+        let resizeObserver: ResizeObserver | null = null;
+        if (terminalRef.current) {
+            resizeObserver = new ResizeObserver(debouncedResizeHandler);
+            resizeObserver.observe(terminalRef.current);
+        }
+        
+        // Initial resize call
+        const initialResizeTimeout = setTimeout(initialFit, 100);
 
         xterm.onData((data: string) => {
             logger.debug(`xterm.onData - Sending data to main:`, data); // New log
@@ -136,7 +135,10 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             clearTimeout(resizeTimeout);
             ipcRenderer.removeAllListeners('terminal:data');
             ipcRenderer.removeAllListeners('terminal:error');
-            window.removeEventListener('resize', debouncedResize);
+            window.removeEventListener('resize', debouncedResizeHandler);
+            if (resizeObserver && terminalRef.current) {
+                resizeObserver.unobserve(terminalRef.current);
+            }
             if (xtermInstanceRef.current) {
                 xtermInstanceRef.current.dispose();
                 xtermInstanceRef.current = null;
@@ -146,7 +148,14 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
         };
     }, [terminalId, onHistoryChange, logger]);
 
-    return <div ref={terminalRef} id="terminal-component-container" className="w-full h-full bg-gray-900"></div>;
+    return (
+        // Use DaisyUI base color for the terminal container background
+        <div 
+            id={`terminal-container-${terminalId}`} 
+            ref={terminalRef} 
+            className="w-full h-full p-1 bg-base-300 rounded-md overflow-hidden"
+        ></div>
+    );
 };
 
 export default TerminalComponent;

@@ -14,85 +14,116 @@ async function captureOutputForCommand(
     terminalId: string, // For writeToPty
     command: string, // The user's command
     shellType: 'powershell.exe' | 'bash',
-    toolCallId: string // For unique marker and logging tag
+    captureRunId: string // Changed from toolCallId to avoid confusion, this is for this specific capture
 ): Promise<{ output?: string; error?: string }> {
-    const endMarker = `__CMD_OUTPUT_END_${Date.now()}_${toolCallId}__`;
-    const commandLinesSent = command.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
-    let markerCommandSent = '';
+    const startMarker = `__CMD_OUTPUT_START_${Date.now()}_${captureRunId}__`;
+    const endMarker = `__CMD_OUTPUT_END_${Date.now()}_${captureRunId}__`;
+    
+    let commandToExecuteWithMarkers = '';
 
     if (shellType === 'powershell.exe') {
-        markerCommandSent = `Write-Output "${endMarker}"`;
-    } else {
-        markerCommandSent = `printf "%s\n" "${endMarker}"`;
+        // PowerShell: Use Write-Output for markers. Ensure commands are separated if needed.
+        // We can send this as one block, relying on PowerShell to execute sequentially.
+        commandToExecuteWithMarkers = `Write-Output "${startMarker}"; ${command}; Write-Output "${endMarker}"`;
+    } else { // bash or other sh-like shells
+        commandToExecuteWithMarkers = `printf "%s\n" "${startMarker}"; ${command}; printf "%s\n" "${endMarker}"`;
     }
 
-    logger.debug(`[${toolCallId}] Capturing output for command:`, command, `with marker command:`, markerCommandSent);
+    logger.debug(`[${captureRunId}] Executing with start/end markers:`, commandToExecuteWithMarkers);
 
     return new Promise((resolve) => {
+        let buffer = '';
+        let capturing = false;
         let capturedOutput = '';
         let commandOutputFinished = false;
         let dataListenerDisposable: IDisposable | null = null;
 
+        // Regex to find the start marker, potentially with leading/trailing whitespace on its line
+        const startMarkerRegex = new RegExp(`^[\s\r\n]*${startMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\s\r\n]*`, 'm');
+        // Regex to find the end marker, potentially with leading/trailing whitespace on its line
+        const endMarkerRegex = new RegExp(`^[\s\r\n]*${endMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\s\r\n]*`, 'm');
+
         const outputListener = (data: string) => {
             if (commandOutputFinished) return;
-            logger.debug(`[${toolCallId}] Raw data chunk for capture:`, data);
-            capturedOutput += data;
-            const markerIndex = capturedOutput.indexOf(endMarker);
+            logger.debug(`[${captureRunId}] Raw data chunk for capture:`, JSON.stringify(data)); // Log with JSON.stringify for clarity
+            buffer += data;
 
-            if (markerIndex !== -1) {
-                logger.debug(`[${toolCallId}] End marker found for capture.`);
-                commandOutputFinished = true;
-                if (dataListenerDisposable) dataListenerDisposable.dispose();
-
-                let outputBeforeMarker = capturedOutput.substring(0, markerIndex);
-                logger.debug(`[${toolCallId}] Output before strip (capture):`, outputBeforeMarker);
-                let strippedOutput = stripAnsiCodes(outputBeforeMarker); // Uses global stripAnsiCodes
-                logger.debug(`[${toolCallId}] Output after strip (capture):`, strippedOutput);
-
-                const lines = strippedOutput.split(/\r?\n/);
-                const cleanedLines: string[] = [];
-                for (const line of lines) {
-                    const trimmedLine = line.trim();
-                    let lineToKeep = true;
-                    if (commandLinesSent.includes(trimmedLine)) lineToKeep = false;
-                    else if (trimmedLine === markerCommandSent.trim()) lineToKeep = false;
-                    if (lineToKeep) cleanedLines.push(line);
+            if (!capturing) {
+                const match = buffer.match(startMarkerRegex);
+                if (match) {
+                    logger.debug(`[${captureRunId}] Actual Start marker output found.`);
+                    // Content after the start marker (and its line) is the beginning of real output.
+                    buffer = buffer.substring(match.index! + match[0].length);
+                    capturing = true;
+                    logger.debug(`[${captureRunId}] Buffer after start marker processing:`, JSON.stringify(buffer));
+                    // Fall through to immediately process this remaining buffer for the end marker
                 }
-                let finalOutput = cleanedLines.join('\n').trim();
-                logger.debug(`[${toolCallId}] Final captured output:`, finalOutput);
-                resolve({ output: finalOutput });
+            }
+
+            if (capturing) {
+                const match = buffer.match(endMarkerRegex);
+                if (match) {
+                    logger.debug(`[${captureRunId}] Actual End marker output found.`);
+                    // Append content before the end marker's line.
+                    capturedOutput += buffer.substring(0, match.index!);
+                    commandOutputFinished = true;
+                    if (dataListenerDisposable) dataListenerDisposable.dispose();
+
+                    logger.debug(`[${captureRunId}] Captured block before strip:`, JSON.stringify(capturedOutput));
+                    let strippedOutput = stripAnsiCodes(capturedOutput);
+                    logger.debug(`[${captureRunId}] Captured block after strip:`, JSON.stringify(strippedOutput));
+                    
+                    let finalOutput = strippedOutput.trim(); // Simpler trim now
+
+                    logger.debug(`[${captureRunId}] Final captured output:`, JSON.stringify(finalOutput));
+                    resolve({ output: finalOutput });
+                    return;
+                } else {
+                    // If end marker not yet found, the whole current buffer (if capturing) 
+                    // or part of it (if start marker was just found) is part of the command output.
+                    // This branch is subtle: if start was found, buffer is already trimmed.
+                    // If not, we are accumulating. The next check for endMarker will handle it.
+                    // No action needed here if end marker is not found yet, just let buffer accumulate more data,
+                    // unless we just started capturing and buffer has content.
+                    // If we just turned capturing on, and buffer has content that doesn't contain the end marker,
+                    // that content is part of the output.
+                    if (capturing && buffer.length > 0) { // Process if capturing and buffer has new data
+                         // This check is to ensure we don't add old buffer content if start marker was found mid-buffer
+                         // and the remainder didn't have the end marker.
+                         // The current logic: buffer is already the part *after* the start marker.
+                         // So, if no end marker, this whole buffer is content.
+                        capturedOutput += buffer;
+                        buffer = '';
+                    }
+                }
             }
         };
 
         try {
+            logger.debug(`[${captureRunId}] Attaching data listener.`);
             dataListenerDisposable = ptyProcess.onData(outputListener);
         } catch (e) {
-            logger.error(`[${toolCallId}] Error attaching PTY data listener for capture:`, e);
+            logger.error(`[${captureRunId}] Error attaching PTY data listener for capture:`, e);
             resolve({ error: 'Cannot attach listener to PTY for output capture.' });
             return;
         }
+        
+        // Send the combined command with start and end markers
+        writeToPty(terminalId, commandToExecuteWithMarkers + '\r');
 
-        // Send user command, then marker command separately
-        writeToPty(terminalId, command + '\n');
-        setTimeout(() => {
-            if (commandOutputFinished) return;
-            writeToPty(terminalId, markerCommandSent + '\n');
-        }, 100); // Small delay
-
+        // Timeout for the whole operation
         setTimeout(() => {
             if (!commandOutputFinished) {
-                logger.warn(`[${toolCallId}] Timeout waiting for end marker during capture.`);
+                logger.warn(`[${captureRunId}] Timeout waiting for end marker during capture.`);
                 commandOutputFinished = true;
                 if (dataListenerDisposable) dataListenerDisposable.dispose();
-                let timedOutOutput = stripAnsiCodes(capturedOutput.substring(0, capturedOutput.indexOf(endMarker) !== -1 ? capturedOutput.indexOf(endMarker) : capturedOutput.length));
-                // Basic cleaning for timeout
-                timedOutOutput = timedOutOutput.split(/\r?\n/).filter(line => {
-                    const trimmedLine = line.trim();
-                    return !commandLinesSent.includes(trimmedLine) && trimmedLine !== markerCommandSent.trim() && !trimmedLine.includes(endMarker);
-                }).join('\n').trim();
+                // On timeout, what we have in capturedOutput is the best guess.
+                let timedOutOutput = stripAnsiCodes(capturedOutput);
+                timedOutOutput = timedOutOutput.trim(); 
+                logger.debug(`[${captureRunId}] Timeout: Final output attempt:`, JSON.stringify(timedOutOutput));
                 resolve({ output: timedOutOutput, error: 'Timeout waiting for end marker' });
             }
-        }, 7000);
+        }, 7000); // 7-second timeout
     });
 }
 
@@ -121,6 +152,7 @@ export function initializeTerminalIpc() {
     });
 
     ipcMain.on('terminal:input', (event, { id, data }: { id: string; data: string }) => {
+        // Corrected the logging string here
         logger.debug(`Received terminal:input for ID ${id}, Data:`, data);
         if (!writeToPty(id, data)) {
             logger.error(`Failed to write to PTY process with ID: ${id}`);

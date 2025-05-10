@@ -7,7 +7,8 @@ module.exports = {
     output: {
         filename: 'renderer.js',
         path: path.resolve(__dirname, 'dist'),
-        publicPath: './' // Important for Electron to find assets correctly
+        publicPath: './dist/', // Corrected publicPath for Electron file:// protocol
+        assetModuleFilename: 'assets/[hash][ext][query]' // Define output for asset modules
     },
     module: {
         rules: [
@@ -34,7 +35,12 @@ module.exports = {
                         },
                     },
                 ]
-            }
+            },
+            // New rule for font files
+            {
+                test: /\.(woff|woff2|eot|ttf|otf|svg)$/i,
+                type: 'asset/resource',
+            },
         ]
     },
     resolve: {
