@@ -136,4 +136,5 @@ dist
 .pnp.*
 src/playwright-report/index.html
 src/package-lock.json
-src/test-results/.last-run.json
+src/test-results/*
+src/playwright-report/*

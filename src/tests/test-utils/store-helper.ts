@@ -1,13 +1,11 @@
 // tests/test-utils/store-helper.ts
-import Store from 'electron-store';
-
 export interface TestStoreConfig {
   geminiApiKey?: string;
   geminiModelName?: string;
   initialModelInstruction?: string;
 }
 
-// Create a mock Store implementation for testing
+// Mock Store implementation for unit tests
 class MockStore {
   private data: { [key: string]: any } = {};
 
@@ -26,11 +24,8 @@ class MockStore {
   }
 }
 
-// Use the real Store in E2E tests, mock in unit tests
-const StoreImpl = process.env.E2E_TEST ? Store : MockStore;
-
 export function setupTestStore(config: TestStoreConfig = {}) {
-  const store = new StoreImpl();
+  const store = new MockStore();
   store.clear();
 
   // Set defaults or provided values
@@ -42,10 +37,10 @@ export function setupTestStore(config: TestStoreConfig = {}) {
 }
 
 export function clearTestStore() {
-  const store = new StoreImpl();
+  const store = new MockStore();
   store.clear();
 }
 
 export function getTestStore() {
-  return new StoreImpl();
+  return new MockStore();
 }

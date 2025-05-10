@@ -6,24 +6,56 @@ import path from 'path';
 const test = base.extend<{
   electronApp: ElectronApplication;
   window: Page;
-}>({  electronApp: async ({}, use) => {
-    // Setup test environment with initial store data
-    const { setupTestStore } = require('../test-utils/store-helper');
-    await setupTestStore();
-
-    // Launch the Electron app
+}>({  
+  electronApp: async ({}, use) => {
     const mainProcessPath = path.join(__dirname, '..', '..', 'dist', 'main.js');
+    
+    // Script to mock electron-store in the renderer process
+    const mockScript = `
+      const Store = require('electron-store');
+      const mockStoreData = {
+        geminiApiKey: 'test-api-key',
+        geminiModelName: 'gemini-test-model',
+        initialModelInstruction: 'TEST_INSTRUCTION: Default test mode.'
+      };
+      if (Store) {
+        Store.prototype.get = (key) => mockStoreData[key];
+        Store.prototype.set = (key, value) => { mockStoreData[key] = value; };
+        Store.prototype.clear = () => { 
+          Object.keys(mockStoreData).forEach(key => delete mockStoreData[key]);
+          // Re-initialize with defaults after clear if needed by the app's logic
+          mockStoreData.geminiApiKey = 'test-api-key';
+          mockStoreData.geminiModelName = 'gemini-test-model';
+          mockStoreData.initialModelInstruction = 'TEST_INSTRUCTION: Default test mode.';
+        };
+      } else {
+        console.error('electron-store could not be required in mockScript');
+      }
+    `;
+
     const app = await _electron.launch({ 
       args: [mainProcessPath],
     });
+
+    // Add the init script to the default browser context
+    await app.context().addInitScript(mockScript);
 
     await use(app);
     await app.close();
   },
   window: async ({ electronApp }, use) => {
-    const win = await electronApp.firstWindow();
-    await win.waitForLoadState('domcontentloaded');
-    await use(win);
+    // Wait for the first window to open.
+    const window = await electronApp.firstWindow();
+    
+    // Ensure the window is fully loaded
+    await window.waitForLoadState('load'); // Changed from domcontentloaded to load
+    await window.waitForLoadState('networkidle'); // Added wait for network idle
+
+    // It might be useful to ensure the app window, not devtools, is active
+    // However, directly focusing can be tricky and might not be the root cause.
+    // For now, let's rely on proper load state.
+
+    await use(window);
   },
 });
 
