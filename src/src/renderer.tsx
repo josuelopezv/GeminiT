@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 import '../styles/tailwind.css'; 
 import '../styles/main.css';     
 import '@xterm/xterm/css/xterm.css'; 
+import 'remixicon/fonts/remixicon.css'; // Added Remix Icon CSS import
 
 import App from './renderer-process/components/App';
 

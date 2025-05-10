@@ -21,7 +21,8 @@
     "electron-store": "^9.0.0",
     "node-pty": "github:microsoft/node-pty",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "remixicon": "^4.2.0"
   },
   "devDependencies": {
     "@types/electron": "^1.4.38",

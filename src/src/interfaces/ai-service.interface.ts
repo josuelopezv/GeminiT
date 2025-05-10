@@ -46,7 +46,7 @@ export interface IAiService {
     getApiKey(): string;
     getModelName(): string;
     listAvailableModels(): Promise<string[]>;
-    processQuery(query: string, terminalHistory: string): Promise<IAIResponse>;
-    // processToolExecutionResult is now effectively deprecated in AIService for the new flow
+    // Updated processQuery to accept contextType
+    processQuery(query: string, contextContent: string, contextType?: string): Promise<IAIResponse>; 
     processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse>; 
 }

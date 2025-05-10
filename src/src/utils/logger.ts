@@ -8,7 +8,9 @@ export enum LogLevel {
     ERROR = 3
 }
 
-const CURRENT_LOG_LEVEL: LogLevel = app && !app.isPackaged ? LogLevel.DEBUG : LogLevel.INFO;
+// Temporarily force DEBUG level for this testing session
+const CURRENT_LOG_LEVEL: LogLevel = LogLevel.DEBUG; 
+// const CURRENT_LOG_LEVEL: LogLevel = app && !app.isPackaged ? LogLevel.DEBUG : LogLevel.INFO; // Original line
 
 function formatMessage(level: LogLevel, tag: string, message: string, ...args: any[]): string {
     const timestamp = new Date().toISOString();

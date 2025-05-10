@@ -54,57 +54,55 @@ class AIService implements IAiService {
         return condensedHistory;
     }
 
-    async processQuery(query: string, terminalHistory: string): Promise<IAIResponse> {
-        const condensedHistory = this.cleanAndPrepareTerminalHistory(terminalHistory);
-        const fullQueryWithContext = `User Query: ${query}\n\nRecent Terminal Activity (cleaned, up to ${MAX_AI_HISTORY_CONTEXT_CHARS} chars of relevant lines):\n${condensedHistory || '(No recent terminal activity to show)'}`;
-        const queryMessageParts: GenericMessagePart[] = [{ text: fullQueryWithContext }];
-
-        if (!require('electron').app.isPackaged) {
-            logger.debug(`[AIService] Condensed History for AI Prompt (${condensedHistory.length} chars):`, condensedHistory);
+    async processQuery(query: string, contextContent: string, contextType: string = "general terminal activity"): Promise<IAIResponse> {
+        // The cleanAndPrepareTerminalHistory is now expected to be done by the caller if it's general history.
+        // If contextContent is specific command output, it might already be clean or need different cleaning.
+        // For now, assume contextContent is reasonably clean.
+        
+        let finalContext = contextContent.trim();
+        finalContext = finalContext.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n');
+        if (finalContext.length > MAX_AI_HISTORY_CONTEXT_CHARS) {
+            finalContext = "[...context trimmed for brevity...]\n" + finalContext.slice(-MAX_AI_HISTORY_CONTEXT_CHARS);
         }
 
+        if (!require('electron').app.isPackaged) {
+            logger.debug(`[AIService] Context for AI Prompt (type: ${contextType}, ${finalContext.length} chars):`, finalContext);
+        }
+
+        const fullQueryWithContext = `User Query: ${query}\n\nContext (Source: ${contextType}):\n${finalContext || '(No context provided)'}`;
+        const queryMessageParts: GenericMessagePart[] = [{ text: fullQueryWithContext }];
+
+        // ... (rest of processQuery method: try/catch block with chatManager.sendMessage, response parsing) ...
         try {
             const chatManagerResponse: IChatResponse | null = await this.chatManager.sendMessage(queryMessageParts);
 
             if (!chatManagerResponse) {
                 throw new Error('Received null response from ChatManager.sendMessage');
             }
-
             if (!chatManagerResponse.candidates || chatManagerResponse.candidates.length === 0) {
                 logger.warn('AIService.processQuery: No candidates found in chat manager response.');
                 return { text: "[AI did not provide a response candidate]" };
             }
-
             const candidate = chatManagerResponse.candidates[0];
             if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
                 logger.warn('AIService.processQuery: No parts found in response candidate content.');
                 return { text: "[AI response candidate had no content parts]" };
             }
-
             let combinedText = '';
-
             for (const part of candidate.content.parts) {
                 if (part.functionCall && part.functionCall.name === 'execute_terminal_command') {
                     logger.info('AIService: Gemini proposed a tool call (execute_terminal_command):', part.functionCall.args);
-                    // Convert tool call into a textual suggestion with a markdown code block
                     const commandToSuggest = (part.functionCall.args as { command?: string }).command;
                     if (commandToSuggest) {
-                        // Assume powershell for now if lang is not specified by AI, or make it generic 'sh'
-                        // The AI prompt already asks for ```powershell or ```sh
                         combinedText += `The AI suggests executing the following command:\n\`\`\`sh\n${commandToSuggest}\n\`\`\`\n`;
                     } else {
-                        combinedText += "The AI considered executing a command but didn't specify which one.\n";
+                        combinedText += "The AI considered executing a command but didn\'t specify which one.\n";
                     }
-                    // Do not set potentialToolCall here, as we are converting it to text.
                 } else if (part.text) {
                     combinedText += part.text;
                 }
             }
-            
-            // The IAIResponse interface might no longer need the toolCall field if we always do this conversion.
-            // For now, we just return text.
             return { text: combinedText.trim() };
-
         } catch (error) {
             logger.error('AIService.processQuery Error:', error);
             throw error;

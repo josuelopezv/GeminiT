@@ -11,7 +11,10 @@ interface AppStoreSchemaContents {
 }
 
 export function initializeAiIpc(aiService: IAiService, store: Store<AppStoreSchemaContents>) {
-    ipcMain.handle('ai:process-query', async (event, { query, terminalHistory }: { query: string; terminalHistory: string }): Promise<IAIResponse> => {
+    ipcMain.handle('ai:process-query', async (event, 
+        { query, contextContent, contextType }: 
+        { query: string; contextContent: string; contextType: string } // Added contextContent and contextType
+    ): Promise<IAIResponse> => {
         try {
             const apiKey = (store as any).get('geminiApiKey') as string;
             const modelName = (store as any).get('geminiModelName') as string;
@@ -25,10 +28,12 @@ export function initializeAiIpc(aiService: IAiService, store: Store<AppStoreSche
 
             if (!app.isPackaged) {
                 logger.debug(`User Query:`, query);
-                // The detailed condensed history is logged from AIService itself
+                logger.debug(`Context Type for AI:`, contextType);
+                // Detailed context content is now logged by AIService itself
             }
 
-            const response = await aiService.processQuery(query, terminalHistory);
+            // Pass contextContent and contextType to aiService.processQuery
+            const response = await aiService.processQuery(query, contextContent, contextType);
 
             if (!app.isPackaged) {
                 logger.debug(`AI Response:`, response);

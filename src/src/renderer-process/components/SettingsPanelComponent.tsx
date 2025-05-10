@@ -103,7 +103,9 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
             >
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold">Settings</h3>
-                    <button onClick={onClose} className="text-2xl hover:text-gray-400">&times;</button>
+                    <button onClick={onClose} className="text-2xl hover:text-gray-400 p-1">
+                        <i className="ri-close-line"></i> 
+                    </button>
                 </div>
                 
                 <div className="space-y-4">
