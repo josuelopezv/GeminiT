@@ -1,14 +1,34 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "CommonJS",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
+    "target": "es2020", 
+    "module": "esnext", // Or "commonjs" if you prefer, but esnext is good for modern frontends
+    "jsx": "react-jsx", // Enable JSX
     "moduleResolution": "node",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "outDir": "./dist/renderer", // Optional: specify a different outDir for renderer if not handled by webpack alone
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "allowJs": true, // Allow JavaScript files to be compiled
+    "resolveJsonModule": true, // Allows importing JSON files
+    "isolatedModules": true // Recommended for projects with multiple build steps (like Babel or Webpack)
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*" // This will include .ts and .tsx files in src
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/main.ts", // Exclude main process entry, handled by tsconfig.main.json
+    "src/main-process/**/*.ts", // Exclude other main process files
+    "src/ai-service.ts",
+    "src/ai-tools.ts",
+    "src/gemini-chat-session-manager.ts",
+    "src/google-ai-utils.ts"
+    // Keep tsconfig.main.json for main process specific compilation
+  ]
 }

@@ -1,3 +1,6 @@
+// This file is now deprecated. Its functionality has been moved to SettingsPanelComponent.tsx.
+// Please delete this file.
+
 import { ipcRenderer } from 'electron';
 import * as DOM from './dom-elements';
 import { appendMessage } from './ui-utils';
