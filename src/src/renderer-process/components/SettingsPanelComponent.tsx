@@ -80,14 +80,41 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
         setIsLoadingModels(false);
     }, [apiKey]);
 
-    const handleSave = () => {
-        ipcRenderer.send('settings:set-api-key', apiKey);
-        onApiKeyChange(apiKey);
-        ipcRenderer.send('settings:set-model-name', modelName);
-        onModelNameChange(modelName);
-        ipcRenderer.send('settings:set-initial-model-instruction', modelInstruction);
-        onInitialModelInstructionChange(modelInstruction);
-        onClose(); // This will trigger the useEffect to close the dialog
+    const handleSave = async () => { // Make handleSave async
+        try {
+            setError(null); // Clear previous errors
+            logger.info('Attempting to save settings...');
+
+            // API Key
+            const apiKeyResult = await ipcRenderer.invoke('settings:set-api-key', apiKey);
+            if (!apiKeyResult.success) {
+                throw new Error(apiKeyResult.error || 'Failed to save API key.');
+            }
+            onApiKeyChange(apiKey); // Update App.tsx state after successful save
+            logger.info('API key saved successfully.');
+
+            // Model Name
+            const modelNameResult = await ipcRenderer.invoke('settings:set-model-name', modelName);
+            if (!modelNameResult.success) {
+                throw new Error(modelNameResult.error || 'Failed to save model name.');
+            }
+            onModelNameChange(modelName); // Update App.tsx state after successful save
+            logger.info('Model name saved successfully.');
+
+            // Initial Model Instruction
+            const instructionResult = await ipcRenderer.invoke('settings:set-initial-model-instruction', modelInstruction);
+            if (!instructionResult.success) {
+                throw new Error(instructionResult.error || 'Failed to save model instruction.');
+            }
+            onInitialModelInstructionChange(modelInstruction); // Update App.tsx state after successful save
+            logger.info('Model instruction saved successfully.');
+
+            onClose(); // Close dialog only after all settings are successfully saved
+        } catch (err: any) {
+            logger.error('Error saving settings:', err);
+            setError(err.message || 'An unexpected error occurred while saving settings.');
+            // Do not call onClose() if there was an error, so the user sees the error message.
+        }
     };
 
     // We no longer return null; the dialog element is always in the DOM but hidden/shown by its API.

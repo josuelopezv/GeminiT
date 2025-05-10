@@ -77,10 +77,15 @@ export function initializeSettingsIpc(appStore: AppStoreManager, aiService: IAiS
     });
 
     ipcMain.handle('settings:get-initial-model-instruction', async () => {
-        const instruction = appStore.getInitialModelInstruction(); // Use AppStoreManager method
-        // The AppStoreManager getter should handle default if not set, but we can double-check or rely on its logic.
-        // For now, assuming AppStoreManager.getInitialModelInstruction() returns the stored value or its internal default.
-        return instruction === undefined || instruction === '' ? DEFAULT_INITIAL_MODEL_INSTRUCTION : instruction;
+        const instructionFromStore = appStore.getInitialModelInstruction();
+        // If the stored instruction is an empty string, return the default instruction.
+        // Otherwise, return the stored instruction.
+        // The schema default (long string) handles the case where the key was never set.
+        if (instructionFromStore === '') {
+            logger.debug('Stored initial model instruction is empty, returning default.');
+            return DEFAULT_INITIAL_MODEL_INSTRUCTION;
+        }
+        return instructionFromStore;
     });
 
     // Modified handler for fetching models

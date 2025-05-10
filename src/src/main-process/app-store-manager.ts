@@ -1,6 +1,9 @@
 // filepath: c:/Users/Admin/source/repos/GeminiT/src/src/main-process/app-store-manager.ts
 import Store, { Schema as ElectronStoreSchema } from 'electron-store';
 import { AppStoreSchemaContents } from '../interfaces/store-schema.interface';
+import { Logger } from '../utils/logger'; // Import Logger
+
+const logger = new Logger('AppStoreManager'); // Create a logger instance
 
 // Define the schema structure for electron-store
 const schema: ElectronStoreSchema<AppStoreSchemaContents> = {
@@ -23,41 +26,50 @@ class AppStoreManager {
 
     constructor() {
         this.store = new Store<AppStoreSchemaContents>({
-            schema,
-            // TODO: Consider a more secure way to handle this encryption key or if it's needed.
-            // For now, using a placeholder. If encryption is not strictly needed for these settings,
-            // it might be better to remove it to avoid potential key management issues.
-            encryptionKey: 'your-app-secret-key-placeholder' 
+            schema
         });
+        logger.info('AppStoreManager initialized (encryption removed).');
+        logger.debug('Initial store path:', (this.store as any).path); // Log store path
+        logger.debug('Initial store content:', (this.store as any).store);
     }
 
     // Gemini API Key
     public getGeminiApiKey(): string {
-        return (this.store as any).get('geminiApiKey') as string;
+        const value = (this.store as any).get('geminiApiKey') as string;
+        logger.debug(`getGeminiApiKey: returning '${value}'`);
+        return value;
     }
 
     public setGeminiApiKey(apiKey: string): void {
+        logger.info(`setGeminiApiKey: setting to '${apiKey}'`);
         (this.store as any).set('geminiApiKey', apiKey);
+        logger.debug('Store content after setGeminiApiKey:', (this.store as any).store);
     }
 
     // Gemini Model Name
     public getGeminiModelName(): string {
-        return (this.store as any).get('geminiModelName') as string;
+        const value = (this.store as any).get('geminiModelName') as string;
+        logger.debug(`getGeminiModelName: returning '${value}'`);
+        return value;
     }
 
     public setGeminiModelName(modelName: string): void {
+        logger.info(`setGeminiModelName: setting to '${modelName}'`);
         (this.store as any).set('geminiModelName', modelName);
+        logger.debug('Store content after setGeminiModelName:', (this.store as any).store);
     }
 
     // Initial Model Instruction
     public getInitialModelInstruction(): string {
-        // Provide a default if the stored value is undefined or empty, similar to settings-ipc
         const instruction = (this.store as any).get('initialModelInstruction') as string;
-        return instruction || DEFAULT_INITIAL_MODEL_INSTRUCTION; // Ensure a default is returned
+        logger.debug(`getInitialModelInstruction: returning '${instruction ? instruction.substring(0, 50) + "..." : "<empty_or_default>"}'`);
+        return instruction; // The IPC handler will apply the DEFAULT_INITIAL_MODEL_INSTRUCTION logic
     }
 
     public setInitialModelInstruction(instruction: string): void {
+        logger.info(`setInitialModelInstruction: setting to '${instruction ? instruction.substring(0,50) + "..." : "<empty>"}'`);
         (this.store as any).set('initialModelInstruction', instruction);
+        logger.debug('Store content after setInitialModelInstruction:', (this.store as any).store);
     }
 
     // Utility to get all store data, might be useful for debugging or settings export

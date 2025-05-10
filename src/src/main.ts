@@ -11,6 +11,9 @@ import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc'
 import { initializeAiIpc } from './main-process/ipc-handlers/ai-ipc';
 import { initializeSettingsIpc } from './main-process/ipc-handlers/settings-ipc';
 import { cleanupPtyProcesses } from './main-process/pty-manager';
+import { Logger } from './utils/logger'; // Import Logger
+
+const mainLogger = new Logger('MainApp'); // Create a logger instance for main.ts
 
 // Schema definition is now inside AppStoreManager
 // const schema: ElectronStoreSchema<AppStoreSchemaContents> = { ... };
@@ -40,7 +43,14 @@ initializeAppLifecycle(() => createMainWindow(cleanupPtyProcesses));
 
 // Graceful shutdown
 app.on('before-quit', () => {
-    console.log('Application is about to quit. Cleaning up...');
+    mainLogger.info('Application is about to quit. Cleaning up...');
+    // Log all settings from AppStoreManager before quitting
+    try {
+        const allSettings = appStoreManager.getAllSettings();
+        mainLogger.info('Final AppStoreManager state before quit:', allSettings);
+    } catch (error) {
+        mainLogger.error('Error retrieving settings from AppStoreManager before quit:', error);
+    }
     cleanupPtyProcesses();
 });
 

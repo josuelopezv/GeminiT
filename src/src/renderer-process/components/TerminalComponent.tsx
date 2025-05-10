@@ -171,7 +171,10 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
 
             const handleTerminalData = (event: Electron.IpcRendererEvent, { id, data }: { id: string; data: string }) => {
                 if (id === terminalId && xtermInstanceRef.current) {
+                    // TODO: check if duplicate data and discard if so
+                    // todo: enable and test this later
                     xtermInstanceRef.current.write(data);
+                    return; // todo remove this return if we want to keep the history
                     const cleanedData = stripAnsiCodes(data);
                     localTerminalHistoryRef.current += cleanedData;
                     if (localTerminalHistoryRef.current.length > MAX_HISTORY_LENGTH) {
