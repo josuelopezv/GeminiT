@@ -128,19 +128,26 @@ const SettingsPanelComponent: React.FC<SettingsPanelProps> = ({
                         <span className="label-text">Model Name</span>
                     </label>
                     <div className="join w-full"> {/* DaisyUI join for grouping select and button */}
-                        <select 
-                            className="select select-bordered join-item w-full" // DaisyUI select and join-item
+                        <select
+                            className="select select-bordered join-item w-full"
                             value={modelName}
                             onChange={(e) => setModelName(e.target.value)}
-                            disabled={isLoadingModels || availableModels.length === 0}
+                            // Disable if loading, or if no models fetched AND no initial/current modelName to display
+                            disabled={isLoadingModels || (availableModels.length === 0 && !modelName)}
                         >
-                            {availableModels.length === 0 && !isLoadingModels && <option value="" disabled>No models loaded. Fetch first.</option>}
-                            {availableModels.length === 0 && isLoadingModels && <option value="" disabled>Loading models...</option>}
-                            {availableModels.map(model => (
-                                <option key={model} value={model}>{model}</option>
-                            ))}
+                            {isLoadingModels ? (
+                                <option value="" disabled>Loading models...</option>
+                            ) : availableModels.length > 0 ? (
+                                availableModels.map(model => (
+                                    <option key={model} value={model}>{model}</option>
+                                ))
+                            ) : modelName ? ( // No models fetched from API, but we have an initial/current modelName
+                                <option key={modelName} value={modelName}>{modelName}</option>
+                            ) : ( // No models fetched, and no initial/current modelName
+                                <option value="" disabled>No models available. Fetch or manually enter.</option>
+                            )}
                         </select>
-                        <button 
+                        <button
                             className={`btn join-item ${isLoadingModels ? 'btn-disabled' : 'btn-neutral'}`} // DaisyUI button and join-item
                             onClick={handleFetchModels}
                             disabled={isLoadingModels || !apiKey}

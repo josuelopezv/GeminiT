@@ -6,7 +6,7 @@ export interface IToolCall {
 
 export interface IAIResponse {
     text?: string;
-    // toolCall?: IToolCall; // This field is no longer directly returned by AIService.processQuery
+    toolCall?: IToolCall; // Re-instating this field for structured tool call responses
 }
 
 // Generic response from a chat manager
@@ -45,8 +45,16 @@ export interface IAiService {
     updateApiKeyAndModel(apiKey: string, modelName: string, initialModelInstruction?: string): void;
     getApiKey(): string;
     getModelName(): string;
-    listAvailableModels(): Promise<string[]>;
+    listAvailableModels(apiKey: string): Promise<string[]>; // Added apiKey parameter
     // Updated processQuery to accept contextType
     processQuery(query: string, contextContent: string, contextType?: string): Promise<IAIResponse>; 
     processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse>; 
+}
+
+// New IAiProvider interface
+export interface IAiProvider {
+    getProviderName(): string;
+    fetchAvailableModels(apiKey: string): Promise<string[]>;
+    createChatManager(apiKey: string, modelName: string, initialModelInstruction: string): IChatManager;
+    // Potentially: validateApiKey(apiKey: string): Promise<boolean>;
 }

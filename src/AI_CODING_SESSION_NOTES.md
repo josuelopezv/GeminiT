@@ -164,4 +164,23 @@ The next step in the previous session was to test the application after the majo
     *   `src/renderer-process/components/App.tsx` (minor adjustments if any for DaisyUI theme propagation)
     *   `src/renderer-process/components/SettingsPanelComponent.tsx` (modal refactor)
     *   `src/renderer-process/components/AiPanelComponent.tsx` (button loading spinner)
-    *   `src/renderer-process/components/TerminalComponent.tsx` (dynamic Xterm.js theming)
+    *   `src/renderer-process/components/TerminalComponent.tsx` (dynamic Xterm.js theming, `requestAnimationFrame` for init)
+
+### 7.4. Session Update (May 10, 2025 - Continued)
+
+*   **`SettingsPanelComponent.tsx` Model Dropdown Enhancement**:
+    *   Improved the logic for the model selection dropdown to correctly display the `initialModelName` (current `modelName` state) as a selectable option when `availableModels` is empty (e.g., before fetching or if fetching fails but a model was previously set).
+    *   Adjusted the `disabled` state of the `select` element to be more intuitive based on loading state and availability of models.
+*   **Direct API Call for Gemini Model Fetching**:
+    *   Modified `src/main-process/ipc-handlers/settings-ipc.ts` to implement the `settings:fetch-models` IPC handler.
+    *   This handler now makes a direct HTTPS `net.request` to the `https://generativelanguage.googleapis.com/v1beta/models?key=API_KEY` endpoint to fetch available Gemini models.
+    *   The response is parsed, and model names (e.g., `models/gemini-1.5-flash-latest`) are returned to the renderer process.
+    *   This replaces the previous reliance on the AI service/SDK for model listing, aligning with a more AI-agnostic approach for settings UI in the future and addressing the `listModels()` SDK issue directly for Gemini.
+*   **`TerminalComponent.tsx` Initialization Refinement**:
+    *   Wrapped the core terminal initialization logic within `requestAnimationFrame` to ensure the DOM element is fully rendered and measurable before `xterm.open()` and `fitAddon.fit()` are called. This aims to resolve persistent "Cannot read properties of undefined (reading 'dimensions')" errors.
+    *   Added `onHistoryChange` to the `useEffect` dependency array.
+
+*   **Updated Files in this continuation**:
+    *   `src/renderer-process/components/SettingsPanelComponent.tsx` (model dropdown logic)
+    *   `src/main-process/ipc-handlers/settings-ipc.ts` (direct Google API call for models)
+    *   `src/renderer-process/components/TerminalComponent.tsx` (refined initialization with `requestAnimationFrame`)
