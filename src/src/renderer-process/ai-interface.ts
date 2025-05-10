@@ -3,7 +3,7 @@ import * as DOM from './dom-elements';
 import { appendMessage } from './ui-utils';
 import { terminalId, terminalHistory } from './terminal-setup';
 import { getHasValidApiKey, getCurrentModelName } from './settings-ui';
-import { AIResponse } from '../ai-service'; // For AIResponse type
+import { IAIResponse } from '../interfaces/ai-service.interface'; // Corrected import path and type
 
 function handleToolCall(toolCallId: string, functionName: string, command: string) {
     appendMessage('AI', `Suggested command: \`${command}\``);
@@ -39,7 +39,7 @@ function handleToolCall(toolCallId: string, functionName: string, command: strin
             toolCallId,
             functionName,
             commandOutput: "User denied execution."
-        }).then((aiFollowUpResponse: AIResponse) => {
+        }).then((aiFollowUpResponse: IAIResponse) => { // Use IAIResponse
             if (aiFollowUpResponse.text) {
                 appendMessage('AI', aiFollowUpResponse.text);
             }
@@ -70,7 +70,7 @@ async function processAiQuery() {
     appendMessage('User', query);
 
     try {
-        const response: AIResponse = await ipcRenderer.invoke('ai:process-query', {
+        const response: IAIResponse = await ipcRenderer.invoke('ai:process-query', { // Use IAIResponse
             query,
             terminalHistory
         });
@@ -123,7 +123,7 @@ export function initializeAiInterface() {
                 toolCallId,
                 functionName: originalFunctionName || 'execute_terminal_command',
                 commandOutput: `Error capturing output: ${captureError}`
-            }).then((aiFollowUpResponse: AIResponse) => {
+            }).then((aiFollowUpResponse: IAIResponse) => { // Use IAIResponse
                 if (aiFollowUpResponse.text) {
                     appendMessage('AI', aiFollowUpResponse.text);
                 }
@@ -137,7 +137,7 @@ export function initializeAiInterface() {
             toolCallId,
             functionName: originalFunctionName || 'execute_terminal_command',
             commandOutput: output
-        }).then((aiFollowUpResponse: AIResponse) => {
+        }).then((aiFollowUpResponse: IAIResponse) => { // Use IAIResponse
             if (aiFollowUpResponse.text) {
                 appendMessage('AI', aiFollowUpResponse.text);
             } else if (aiFollowUpResponse.toolCall) {

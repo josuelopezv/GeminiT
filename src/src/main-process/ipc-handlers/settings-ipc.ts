@@ -1,14 +1,13 @@
 import { ipcMain } from 'electron';
-import { AIService } from '../../ai-service';
-import Store from 'electron-store'; // Keep the import for type annotation if desired
+import { IAiService } from '../../interfaces/ai-service.interface'; // Import IAiService
+import Store from 'electron-store';
 
-interface AppStoreSchemaContents { // Keep schema for clarity if needed
+interface AppStoreSchemaContents { 
     geminiApiKey: string;
     geminiModelName: string;
 }
 
-// The 'store' parameter type can be Store<AppStoreSchemaContents> or just Store
-export function initializeSettingsIpc(store: Store<AppStoreSchemaContents>, aiService: AIService) {
+export function initializeSettingsIpc(store: Store<AppStoreSchemaContents>, aiService: IAiService) { // Use IAiService type
     ipcMain.handle('settings:set-api-key', async (event, apiKey: string) => {
         try {
             (store as any).set('geminiApiKey', apiKey);

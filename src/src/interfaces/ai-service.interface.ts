@@ -1,0 +1,57 @@
+// src/interfaces/ai-service.interface.ts
+
+// Remove direct import of AIResponse from ../ai-service, as IAIResponse is the generic one.
+// import { AIResponse } from '../ai-service'; 
+import { Part, FunctionResponsePart } from '@google/generative-ai'; // Keep these for now, they define input parts
+
+export interface IToolCall {
+    id: string;
+    functionName: string;
+    args: { [key: string]: any }; 
+}
+
+export interface IAIResponse {
+    text?: string;
+    toolCall?: IToolCall;
+}
+
+// Generic response from a chat manager
+export interface IChatCompletionPart {
+    text?: string;
+    functionCall?: {
+        name: string;
+        args: { [key: string]: any };
+    };
+}
+
+export interface IChatCompletionCandidate {
+    content: {
+        parts: IChatCompletionPart[];
+        role?: string; // Optional role
+    };
+    // Add other relevant candidate properties if needed, like finishReason
+}
+
+export interface IChatResponse {
+    candidates: IChatCompletionCandidate[];
+    // Add other generic response properties if needed, like usage metadata
+}
+
+// Generic parts for sending messages. These might need to be more abstract
+// if different SDKs have very different input structures beyond simple text/function parts.
+export type GenericMessagePart = { text: string } | { functionResponse: { name: string; response: any } } | { functionCall: { name: string; args: any } };
+
+export interface IChatManager {
+    updateCredentials(apiKey: string, modelName: string): void;
+    sendMessage(userQueryParts: GenericMessagePart[]): Promise<IChatResponse | null>; 
+    sendFunctionResponse(functionResponseParts: GenericMessagePart[]): Promise<IChatResponse | null>; 
+}
+
+export interface IAiService {
+    updateApiKeyAndModel(apiKey: string, modelName: string): void;
+    getApiKey(): string;
+    getModelName(): string;
+    listAvailableModels(): Promise<string[]>;
+    processQuery(query: string, terminalHistory: string): Promise<IAIResponse>;
+    processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse>;
+}

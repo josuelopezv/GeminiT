@@ -1,5 +1,5 @@
 import { ipcMain, app } from 'electron';
-import { AIService, AIResponse } from '../../ai-service'; // Import AIResponse
+import { IAiService, IAIResponse } from '../../interfaces/ai-service.interface'; // Import IAiService and IAIResponse
 import Store from 'electron-store';
 
 interface AppStoreSchemaContents {
@@ -7,8 +7,8 @@ interface AppStoreSchemaContents {
     geminiModelName: string;
 }
 
-export function initializeAiIpc(aiService: AIService, store: Store<AppStoreSchemaContents>) {
-    ipcMain.handle('ai:process-query', async (event, { query, terminalHistory }: { query: string; terminalHistory: string }) => {
+export function initializeAiIpc(aiService: IAiService, store: Store<AppStoreSchemaContents>) { // Use IAiService type
+    ipcMain.handle('ai:process-query', async (event, { query, terminalHistory }: { query: string; terminalHistory: string }): Promise<IAIResponse> => { // Return IAIResponse
         try {
             const apiKey = (store as any).get('geminiApiKey') as string;
             const modelName = (store as any).get('geminiModelName') as string;
@@ -83,7 +83,7 @@ export function initializeAiIpc(aiService: AIService, store: Store<AppStoreSchem
     ipcMain.handle('ai:process-tool-result', async (event, 
         { toolCallId, functionName, commandOutput }: 
         { toolCallId: string; functionName: string; commandOutput: string }
-    ): Promise<AIResponse> => {
+    ): Promise<IAIResponse> => { // Return IAIResponse
         try {
             if (!app.isPackaged) { // Conditional logging
                 console.log(`[DEV AI Tool Result for ${functionName} (ID: ${toolCallId})]:`, commandOutput.substring(0, 200));

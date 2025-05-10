@@ -52,7 +52,7 @@ export function captureCommandOutput(
             if (commandOutputFinished) return;
             console.log(`[captureCommandOutput DEBUG ${toolCallId}] Raw data chunk: ${JSON.stringify(data)}`);
             capturedOutput += data;
-            // console.log(`[captureCommandOutput DEBUG ${toolCallId}] Accumulated: ${JSON.stringify(capturedOutput)}`);
+            console.log(`[captureCommandOutput DEBUG ${toolCallId}] Accumulated: ${JSON.stringify(capturedOutput)}`);
 
             const markerIndex = capturedOutput.indexOf(endMarker);
             if (markerIndex !== -1) {
@@ -106,11 +106,14 @@ export function captureCommandOutput(
                 if (dataListenerDisposable) {
                     dataListenerDisposable.dispose();
                 }
+                console.log(`[captureCommandOutput DEBUG ${toolCallId}] Timeout: Initial capturedOutput: ${JSON.stringify(capturedOutput)}`);
                 let timedOutOutput = stripAnsiCodes(capturedOutput);
+                console.log(`[captureCommandOutput DEBUG ${toolCallId}] Timeout: Output after stripAnsiCodes: ${JSON.stringify(timedOutOutput)}`);
                 const markerIdx = timedOutOutput.indexOf(endMarker);
                 if (markerIdx !== -1) {
                     timedOutOutput = timedOutOutput.substring(0, markerIdx);
                 }
+                console.log(`[captureCommandOutput DEBUG ${toolCallId}] Timeout: Output after marker substring: ${JSON.stringify(timedOutOutput)}`);
                 const lines = timedOutOutput.split(/\r?\n/);
                 const cleanedLines: string[] = [];
                 for (const line of lines) {

@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import Store, { Schema as ElectronStoreSchema } from 'electron-store'; // Import Schema as ElectronStoreSchema to avoid name collision if any
 import { AIService } from './ai-service';
+import { IAiService } from './interfaces/ai-service.interface'; // Import the interface
 import { createMainWindow } from './main-process/window-manager';
 import { initializeAppLifecycle } from './main-process/app-lifecycle';
 import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc';
@@ -31,8 +32,8 @@ const store: Store<AppStoreSchemaContents> = new Store<AppStoreSchemaContents>({
     encryptionKey: 'your-app-secret-key' // Consider a more secure way to handle this
 });
 
-// Initialize AI Service
-const aiService = new AIService(
+// Initialize AI Service with the interface type
+const aiService: IAiService = new AIService( // Use IAiService type
     (store as any).get('geminiApiKey'),
     (store as any).get('geminiModelName')
 );
@@ -40,8 +41,8 @@ const aiService = new AIService(
 // Initialize IPC Handlers
 initializeTerminalIpc();
 // Explicitly cast store to the specific type when passing
-initializeAiIpc(aiService, store);
-initializeSettingsIpc(store, aiService);
+initializeAiIpc(aiService, store as Store<AppStoreSchemaContents>);
+initializeSettingsIpc(store as Store<AppStoreSchemaContents>, aiService);
 
 // Initialize App Lifecycle
 initializeAppLifecycle(() => createMainWindow(cleanupPtyProcesses));
