@@ -42,7 +42,7 @@ export interface IChatManager {
 }
 
 export interface IAiService {
-    updateApiKeyAndModel(apiKey: string, modelName: string): void;
+    updateApiKeyAndModel(apiKey: string, modelName: string, initialModelInstruction?: string): void;
     getApiKey(): string;
     getModelName(): string;
     listAvailableModels(): Promise<string[]>;

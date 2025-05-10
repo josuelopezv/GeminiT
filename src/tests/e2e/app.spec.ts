@@ -1,39 +1,37 @@
 // tests/e2e/app.spec.ts
-import { test, expect, _electron, ElectronApplication, Page } from '@playwright/test';
+import { test as base, expect, _electron, ElectronApplication, Page } from '@playwright/test';
 import path from 'path';
 
-let electronApp: ElectronApplication;
-let window: Page;
+// Extend the base test with our fixture
+const test = base.extend<{
+  electronApp: ElectronApplication;
+  window: Page;
+}>({  electronApp: async ({}, use) => {
+    // Setup test environment with initial store data
+    const { setupTestStore } = require('../test-utils/store-helper');
+    await setupTestStore();
 
-test.beforeAll(async () => {
-  // Launch the Electron app.
-  // Adjust the path to your main process entry point as needed.
-  // __dirname here will be tests/e2e, so we go up two levels to the project root.
-  const mainProcessPath = path.join(__dirname, '..', '..', 'dist', 'main.js');
-  
-  electronApp = await _electron.launch({ 
-    args: [mainProcessPath],
-    // You might need to set cwd if your app depends on the current working directory
-    // cwd: path.join(__dirname, '..', '..') 
-  });
+    // Launch the Electron app
+    const mainProcessPath = path.join(__dirname, '..', '..', 'dist', 'main.js');
+    const app = await _electron.launch({ 
+      args: [mainProcessPath],
+    });
 
-  // Wait for the first window to open and assign it to the window variable.
-  window = await electronApp.firstWindow();
-  await window.waitForLoadState('domcontentloaded');
+    await use(app);
+    await app.close();
+  },
+  window: async ({ electronApp }, use) => {
+    const win = await electronApp.firstWindow();
+    await win.waitForLoadState('domcontentloaded');
+    await use(win);
+  },
 });
 
-test.afterAll(async () => {
-  // Close the app
-  if (electronApp) {
-    await electronApp.close();
-  }
-});
-
-test('App launches and has correct title', async () => {
+test('App launches and has correct title', async ({ window }) => {
   await expect(window).toHaveTitle('AI-Augmented Terminal (React)');
 });
 
-test('App displays main UI panels', async () => {
+test('App displays main UI panels', async ({ window }) => {
   // Check for elements rendered by React components.
   // We use text content or more robust selectors if available.
   // These locators assume some text or identifiable attributes are present.
@@ -49,6 +47,7 @@ test('App displays main UI panels', async () => {
 
   // Check if the AI input placeholder is visible
   const aiQueryInput = window.locator('input[placeholder="Ask AI..."]');
+  await expect(aiQueryInput).toBeVisible();
   await expect(aiQueryInput).toBeVisible();
 });
 

@@ -12,16 +12,18 @@ export interface AIResponse {
     suggestedCommand?: string;
 }
 
-class AIService {
+class AIService {    
     private genAI!: GoogleGenerativeAI | null;
     private model!: GenerativeModel | null;
     private apiKey: string;
     private modelName: string;
+    private initialModelInstruction: string;
     private currentChatSession: ChatSession | null = null; // To store the active chat session
 
-    constructor(apiKey: string, modelName: string) {
+    constructor(apiKey: string, modelName: string, initialModelInstruction: string = '') {
         this.apiKey = apiKey;
         this.modelName = modelName;
+        this.initialModelInstruction = initialModelInstruction;
         if (this.apiKey) {
             try {
                 this.genAI = new GoogleGenerativeAI(this.apiKey);
@@ -31,15 +33,14 @@ class AIService {
             }
         }
         this.initializeWithKeyAndModel(apiKey, modelName);
-    }
-
-    private initializeWithKeyAndModel(apiKey: string, modelName: string) {
+    }    private initializeWithKeyAndModel(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
         this.currentChatSession = null; // Reset chat session
 
-        if (apiKey && !this.genAI) { 
+        if (apiKey) { 
             try {
+                // Always create a fresh GoogleGenerativeAI instance with the latest key
                 this.genAI = new GoogleGenerativeAI(apiKey);
             } catch (error) {
                 console.error('Error initializing GoogleGenerativeAI in initializeWithKeyAndModel:', error);
@@ -48,14 +49,21 @@ class AIService {
                 return;
             }
         }
+
         if (this.genAI && modelName) {
             try {
                 this.model = this.genAI.getGenerativeModel({ model: this.modelName, tools: [EXECUTE_TERMINAL_COMMAND_TOOL] });
-                // Initialize chat session here or when first query is made
-                this.currentChatSession = this.model.startChat({ 
-                    history: [], // Start with empty history, or provide initial context
+                
+                // Initialize chat session with the model instruction
+                const chatHistory = this.initialModelInstruction ? [
+                    { role: "user", parts: [{ text: this.initialModelInstruction }] },
+                    { role: "model", parts: [{ text: "Understood. I will follow these instructions." }] }
+                ] : [];
+
+                this.currentChatSession = this.model.startChat({
+                    history: chatHistory,
                     tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
-                }); 
+                });
             } catch (error) {
                 console.error(`Error initializing AI Service with model ${modelName}:`, error);
                 this.model = null;
@@ -65,12 +73,13 @@ class AIService {
             this.model = null;
             this.currentChatSession = null;
         }
-    }
-
-    updateApiKeyAndModel(apiKey: string, modelName: string) {
+    }    updateApiKeyAndModel(apiKey: string, modelName: string, newInitialModelInstruction?: string) {
         const oldApiKey = this.apiKey;
         this.apiKey = apiKey;
         this.modelName = modelName;
+        if (newInitialModelInstruction !== undefined) {
+            this.initialModelInstruction = newInitialModelInstruction;
+        }
 
         if (apiKey !== oldApiKey || !this.genAI) {
             try {
@@ -83,7 +92,7 @@ class AIService {
                 return;
             }
         }
-        this.initializeWithKeyAndModel(apiKey, modelName); // This will re-initialize model and chat
+        this.initializeWithKeyAndModel(apiKey, modelName); // This will re-initialize model and chat with updated instruction
     }
 
     getApiKey(): string {

@@ -10,7 +10,12 @@ interface AppStoreSchemaContents {
     geminiModelName: string;
 }
 
-export function initializeAiIpc(aiService: IAiService, store: Store<AppStoreSchemaContents>) {
+export function initializeAiIpc(aiService: IAiService, storeInstance: Store<AppStoreSchemaContents>) {
+    // Create a typed wrapper around the store instance
+    const store = storeInstance as Store & {
+        get<K extends keyof AppStoreSchemaContents>(key: K): AppStoreSchemaContents[K];
+        set<K extends keyof AppStoreSchemaContents>(key: K, value: AppStoreSchemaContents[K]): void;
+    };
     ipcMain.handle('ai:process-query', async (event, 
         { query, contextContent, contextType }: 
         { query: string; contextContent: string; contextType: string } // Added contextContent and contextType

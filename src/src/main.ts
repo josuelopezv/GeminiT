@@ -12,6 +12,7 @@ import { cleanupPtyProcesses } from './main-process/pty-manager';
 interface AppStoreSchemaContents {
     geminiApiKey: string;
     geminiModelName: string;
+    initialModelInstruction: string;
 }
 
 const schema: ElectronStoreSchema<AppStoreSchemaContents> = {
@@ -22,7 +23,11 @@ const schema: ElectronStoreSchema<AppStoreSchemaContents> = {
     geminiModelName: {
         type: 'string',
         default: 'gemini-1.5-flash-latest'
-    }
+    },
+    initialModelInstruction: {
+        type: 'string',
+        default: 'You are a helpful AI assistant integrated into a terminal application. When a user asks for a command, or if a command is the most helpful response, provide the command in a markdown code block, specifying the language (e.g., powershell, bash, cmd). If you are providing a command, use the execute_terminal_command tool. Do not use it for other purposes. If the user asks a question about a previous command\'s output, I will provide that output as context.'
+    }  
 };
 
 // Simplify import and explicitly type the store instance
@@ -34,7 +39,8 @@ const store: Store<AppStoreSchemaContents> = new Store<AppStoreSchemaContents>({
 // Initialize AI Service
 const aiService = new AIService(
     (store as any).get('geminiApiKey'),
-    (store as any).get('geminiModelName')
+    (store as any).get('geminiModelName'),
+    (store as any).get('initialModelInstruction', schema.initialModelInstruction.default)
 );
 
 // Initialize IPC Handlers

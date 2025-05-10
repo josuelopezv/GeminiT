@@ -10,7 +10,13 @@ interface AppStoreSchemaContents {
 
 const DEFAULT_INITIAL_MODEL_INSTRUCTION = "You are a helpful AI assistant integrated into a terminal application. When a user asks for a command, or if a command is the most helpful response, provide the command in a markdown code block, specifying the language (e.g., powershell, bash, cmd). If you are providing a command, use the execute_terminal_command tool. Do not use it for other purposes. If the user asks a question about a previous command's output, I will provide that output as context.";
 
-export function initializeSettingsIpc(store: Store<AppStoreSchemaContents>, aiService: IAiService) { // Use IAiService type
+// Add type assertion to make TypeScript happy with electron-store methods
+export function initializeSettingsIpc(storeInstance: Store<AppStoreSchemaContents>, aiService: IAiService) {
+    // Create a typed wrapper around the store instance
+    const store = storeInstance as Store & {
+        get<K extends keyof AppStoreSchemaContents>(key: K): AppStoreSchemaContents[K];
+        set<K extends keyof AppStoreSchemaContents>(key: K, value: AppStoreSchemaContents[K]): void;
+    };// Use IAiService type
     ipcMain.handle('settings:set-api-key', async (event, apiKey: string) => {
         try {
             store.set('geminiApiKey', apiKey);
@@ -58,9 +64,8 @@ export function initializeSettingsIpc(store: Store<AppStoreSchemaContents>, aiSe
             console.error('Error setting initial model instruction:', err);
             return { success: false, error: err.message };
         }
-    });
-
-    ipcMain.handle('settings:get-initial-model-instruction', async () => {
-        return store.get('initialModelInstruction', DEFAULT_INITIAL_MODEL_INSTRUCTION) as string;
+    });    ipcMain.handle('settings:get-initial-model-instruction', async () => {
+        const value = store.get('initialModelInstruction');
+        return value === undefined ? DEFAULT_INITIAL_MODEL_INSTRUCTION : value;
     });
 }
