@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
-    "outDir": "./dist",
+    "outDir": "./dist", // Output directory for main process files
     "rootDir": "./src",
     "strict": true,
     "moduleResolution": "node",
@@ -10,5 +10,14 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/main.ts"]
+  "include": [
+    "src/main.ts",
+    "src/ai-service.ts", // ai-service is used by the main process
+    "src/main-process/**/*.ts" // Include all .ts files in main-process and its subdirectories
+  ],
+  "exclude": [
+    "src/renderer.ts", // Exclude renderer process files from this config
+    "node_modules",
+    "dist"
+  ]
 }

@@ -1,12 +1,18 @@
 import { ipcMain } from 'electron';
 import { AIService } from '../../ai-service';
-import Store from 'electron-store'; // Import Store type directly
+import Store from 'electron-store'; // Keep the import for type annotation if desired
 
-export function initializeSettingsIpc(store: Store, aiService: AIService) {
+interface AppStoreSchemaContents { // Keep schema for clarity if needed
+    geminiApiKey: string;
+    geminiModelName: string;
+}
+
+// The 'store' parameter type can be Store<AppStoreSchemaContents> or just Store
+export function initializeSettingsIpc(store: Store<AppStoreSchemaContents>, aiService: AIService) {
     ipcMain.handle('settings:set-api-key', async (event, apiKey: string) => {
         try {
-            store.set('geminiApiKey', apiKey);
-            aiService.updateApiKeyAndModel(apiKey, store.get('geminiModelName') as string);
+            (store as any).set('geminiApiKey', apiKey);
+            aiService.updateApiKeyAndModel(apiKey, (store as any).get('geminiModelName') as string);
             return { success: true };
         } catch (error) {
             const err = error as Error;
@@ -16,13 +22,13 @@ export function initializeSettingsIpc(store: Store, aiService: AIService) {
     });
 
     ipcMain.handle('settings:get-api-key', async () => {
-        return store.get('geminiApiKey') || '';
+        return (store as any).get('geminiApiKey') as string;
     });
 
     ipcMain.handle('settings:set-model-name', async (event, modelName: string) => {
         try {
-            store.set('geminiModelName', modelName);
-            aiService.updateApiKeyAndModel(store.get('geminiApiKey') as string || '', modelName);
+            (store as any).set('geminiModelName', modelName);
+            aiService.updateApiKeyAndModel((store as any).get('geminiApiKey') as string, modelName);
             return { success: true };
         } catch (error) {
             const err = error as Error;
@@ -32,6 +38,6 @@ export function initializeSettingsIpc(store: Store, aiService: AIService) {
     });
 
     ipcMain.handle('settings:get-model-name', async () => {
-        return store.get('geminiModelName') || '';
+        return (store as any).get('geminiModelName') as string;
     });
 }
