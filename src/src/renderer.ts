@@ -1,3 +1,4 @@
+import '../styles/main.css'; // Corrected import path
 import { initializeTerminal } from './renderer-process/terminal-setup';
 import { initializeSettingsPanel } from './renderer-process/settings-ui';
 import { initializeAiInterface } from './renderer-process/ai-interface';

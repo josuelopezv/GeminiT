@@ -19,15 +19,24 @@ export function appendMessage(sender: string, content: string) {
 }
 
 /**
- * Strips ANSI escape codes and other common control characters like backspace.
+ * Strips ANSI escape codes and processes backspace characters.
  * @param str The string to clean.
- * @returns The string without ANSI escape codes or backspaces.
+ * @returns The string without ANSI escape codes and with backspaces processed.
  */
 export function stripAnsiCodes(str: string): string {
-    // Regex for ANSI escape codes
     const ansiRegex = /[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
     let cleanedStr = str.replace(ansiRegex, '');
-    // Remove backspace characters
-    cleanedStr = cleanedStr.replace(/\b/g, '');
-    return cleanedStr;
+    
+    // Process backspace characters
+    let result = '';
+    for (let i = 0; i < cleanedStr.length; i++) {
+        if (cleanedStr[i] === '\b') {
+            if (result.length > 0) {
+                result = result.slice(0, -1); // Remove last character from result
+            }
+        } else {
+            result += cleanedStr[i];
+        }
+    }
+    return result;
 }

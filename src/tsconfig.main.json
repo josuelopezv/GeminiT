@@ -15,7 +15,8 @@
     "src/ai-service.ts", // ai-service is used by the main process
     "src/ai-tools.ts",         // Added
     "src/google-ai-utils.ts",  // Added
-    "src/main-process/**/*.ts" // Include all .ts files in main-process and its subdirectories
+    "src/gemini-chat-session-manager.ts", // Added new chat manager
+    "src/main-process/**/*.ts" // This already includes command-output-capturer.ts if it's in main-process
   ],
   "exclude": [
     "src/renderer.ts", // Exclude renderer process files from this config
