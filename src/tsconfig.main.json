@@ -13,6 +13,8 @@
   "include": [
     "src/main.ts",
     "src/ai-service.ts", // ai-service is used by the main process
+    "src/ai-tools.ts",         // Added
+    "src/google-ai-utils.ts",  // Added
     "src/main-process/**/*.ts" // Include all .ts files in main-process and its subdirectories
   ],
   "exclude": [

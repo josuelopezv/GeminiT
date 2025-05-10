@@ -1,71 +1,15 @@
-import { GoogleGenerativeAI, GenerativeModel, Tool, FunctionDeclaration } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel, Part, Content, FunctionResponsePart } from '@google/generative-ai'; // Added Content, FunctionResponsePart
+import { EXECUTE_TERMINAL_COMMAND_TOOL } from './ai-tools';
+import { fetchModelsFromGoogle } from './google-ai-utils';
 
-// Updated AIResponse to handle potential tool calls
 export interface AIResponse {
-    text?: string; // For direct text responses from AI
+    text?: string;
     toolCall?: {
-        id: string; // ID of the tool call, needed for sending back results
+        id: string; 
         functionName: string;
-        args: { command?: string }; // Arguments for the function, e.g., the command to run
+        args: { command?: string };
     };
-    // suggestedCommand can be phased out if tool calls become the primary way to suggest commands
-    suggestedCommand?: string; 
-}
-
-const EXECUTE_TERMINAL_COMMAND_TOOL: Tool = {
-    functionDeclarations: [
-        {
-            name: "execute_terminal_command",
-            description: "Executes a shell command in the user's terminal and returns its output. Use this to perform actions or retrieve information from the user's system.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    command: {
-                        type: "STRING",
-                        description: "The terminal command to execute (e.g., 'ls -l', 'git status')."
-                    }
-                },
-                required: ["command"]
-            }
-        } as FunctionDeclaration // Cast to FunctionDeclaration for stricter typing if needed by SDK version
-    ]
-};
-
-const FALLBACK_MODELS = [
-    'gemini-1.5-flash-latest',
-    'gemini-1.0-pro', // Older but might be available
-    'gemini-pro', // Common alias
-];
-
-async function fetchModelsFromGoogle(apiKey: string): Promise<string[]> {
-    if (!apiKey) {
-        console.warn('fetchModelsFromGoogle: API key is missing.');
-        return FALLBACK_MODELS; // Provide fallback if no API key to attempt SDK call
-    }
-    try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        // @ts-ignore - Retaining for type-checking, but runtime is the primary issue.
-        const modelsResult = await genAI.listModels();
-        const compatibleModels: string[] = [];
-        for (const m of modelsResult) {
-            if (m.supportedGenerationMethods.includes('generateContent') && !m.name.includes('chat-bison') && !m.name.includes('text-bison')) {
-                compatibleModels.push(m.name.replace(/^models\//, ''));
-            }
-        }
-        if (compatibleModels.length > 0) {
-            return compatibleModels;
-        }
-        console.warn("fetchModelsFromGoogle: No compatible models found via SDK. Using fallback list.");
-        return FALLBACK_MODELS;
-    } catch (error) {
-        console.error('fetchModelsFromGoogle: Error listing models via SDK:', error);
-        if (error instanceof Error && error.message.includes('listModels is not a function')){
-            console.warn("fetchModelsFromGoogle: genAI.listModels is not a function. SDK version or usage might be incorrect. Using fallback list.");
-        } else {
-            console.warn("fetchModelsFromGoogle: An unexpected error occurred while listing models via SDK. Using fallback list.");
-        }
-        return FALLBACK_MODELS;
-    }
+    suggestedCommand?: string;
 }
 
 class AIService {
@@ -73,6 +17,7 @@ class AIService {
     private model!: GenerativeModel | null;
     private apiKey: string;
     private modelName: string;
+    private chatHistory: Content[] = []; // Changed from Part[] to Content[]
 
     constructor(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
@@ -91,6 +36,8 @@ class AIService {
     private initializeWithKeyAndModel(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
+        this.chatHistory = []; // Reset history
+
         if (apiKey && !this.genAI) { 
             try {
                 this.genAI = new GoogleGenerativeAI(apiKey);
@@ -103,7 +50,8 @@ class AIService {
         }
         if (this.genAI && modelName) {
             try {
-                this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+                // Tools are now typically passed to the model instance directly
+                this.model = this.genAI.getGenerativeModel({ model: this.modelName, tools: [EXECUTE_TERMINAL_COMMAND_TOOL] });
             } catch (error) {
                 console.error(`Error initializing AI Service with model ${modelName}:`, error);
                 this.model = null;
@@ -114,18 +62,22 @@ class AIService {
     }
 
     updateApiKeyAndModel(apiKey: string, modelName: string) {
-        if (apiKey !== this.apiKey || !this.genAI) {
+        const oldApiKey = this.apiKey;
+        this.apiKey = apiKey;
+        this.modelName = modelName;
+
+        if (apiKey !== oldApiKey || !this.genAI) {
             try {
                 this.genAI = new GoogleGenerativeAI(apiKey);
             } catch (error) {
                 console.error('Error re-initializing GoogleGenerativeAI in updateApiKeyAndModel:', error);
                 this.genAI = null;
                 this.model = null;
-                this.apiKey = apiKey;
-                this.modelName = modelName;
+                this.chatHistory = [];
                 return;
             }
         }
+        // Re-initialize model with new settings and reset history
         this.initializeWithKeyAndModel(apiKey, modelName);
     }
 
@@ -138,7 +90,6 @@ class AIService {
     }
 
     async listAvailableModels(): Promise<string[]> {
-        // Use the standalone helper function
         return fetchModelsFromGoogle(this.apiKey);
     }
 
@@ -147,62 +98,100 @@ class AIService {
             throw new Error('AI Service is not initialized. API key or Model Name may be missing or invalid.');
         }
         try {
-            const chat = this.model.startChat({
-                history: [
-                    { role: "user", parts: [{ text: "You are an AI assistant integrated into a terminal. Here is some recent terminal history:\n" + terminalHistory }] },
-                    { role: "model", parts: [{ text: "Understood. I will assist with terminal commands and queries. I can also execute commands if you ask me to and I deem it appropriate by calling the execute_terminal_command tool." }] }
-                ],
-                tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
-            });
+            const userQueryContent: Content = { role: "user", parts: [{ text: query }] };
+            let historyForThisTurn = [...this.chatHistory];
+            historyForThisTurn.push(userQueryContent);
 
-            const result = await chat.sendMessage(query);
+            // Optional: Add terminal history as a separate user message for clarity in history
+            // if (terminalHistory) {
+            //     historyForThisTurn.push({ role: "user", parts: [{ text: "Current terminal context:\n" + terminalHistory }] });
+            // }
+
+            const chat = this.model.startChat({
+                history: historyForThisTurn, // Send a copy of history up to this point
+                // tools are already part of the model instance
+            });
+            
+            const result = await chat.sendMessage(query); // Send only the current query string
             const response = result.response;
+
+            // Add user query and model response to persistent history
+            this.chatHistory.push(userQueryContent);
+            if (response.candidates && response.candidates.length > 0) {
+                this.chatHistory.push(response.candidates[0].content); 
+            } else {
+                // Handle cases where there might be no candidates (e.g. safety blocked)
+                this.chatHistory.push({role: "model", parts: [{text: "[No response content from model]"}]});
+            }
 
             const functionCalls = response.functionCalls();
             if (functionCalls && functionCalls.length > 0) {
-                const call = functionCalls[0]; // Assuming one tool call for now
-                console.log('AIService: Received tool call:', JSON.stringify(call));
+                const call = functionCalls[0];
                 return {
                     toolCall: {
-                        id: call.name, // The SDK might use call.name or a specific ID field for the call instance
-                        functionName: call.name, // Or ensure this is the actual function name if different
-                        args: call.args as { command?: string } // Type assertion for args
+                        id: call.name, // This should be the unique ID of the function call if available
+                        functionName: call.name, 
+                        args: call.args as { command?: string }
                     }
                 };
             }
 
-            // If no tool call, process as text response
             const text = response.text();
-            const commandMatch = text.match(/Command:\s*(.+)$/m);
-            const explanationMatch = text.match(/Explanation:\s*(.+)(?=\nCommand:|$)/s);
-
-            return {
-                text: explanationMatch ? explanationMatch[1].trim() : text,
-                suggestedCommand: commandMatch ? commandMatch[1].trim() : undefined
-            };
+            return { text };
 
         } catch (error) {
             console.error('AI Service processQuery Error:', error);
+            // Don't modify chatHistory here as it might lead to inconsistencies
             throw error;
         }
     }
 
-    // Placeholder for the next step: processing tool execution results
-    async processToolExecutionResult(toolCallId: string, commandOutput: string): Promise<AIResponse> {
+    async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<AIResponse> {
         if (!this.apiKey || !this.modelName || !this.model) {
             throw new Error('AI Service is not initialized for tool result processing.');
         }
-        console.log(`AIService: Sending tool execution result for ${toolCallId} with output: ${commandOutput.substring(0,100)}...`);
+        console.log(`AIService: Sending tool execution result for ${functionName} (ID: ${toolCallId})`);
         
-        // This will involve sending the tool response back to the model via chat.sendMessage with a functionResponse part
-        // For now, let's return a simple text confirmation
-        // const chat = this.model.startChat(... with history and tools ...);
-        // const result = await chat.sendMessage([{ functionResponse: { name: toolCallId, response: { output: commandOutput } } }]);
-        // const response = result.response.text();
-        // return { text: response };
+        try {
+            const functionResponsePart: FunctionResponsePart = {
+                functionResponse: {
+                    name: functionName, 
+                    response: { name: functionName, content: { output: commandOutput } },
+                }
+            };
+            
+            // Add the function response part to history
+            this.chatHistory.push({ role: "function", parts: [functionResponsePart] });
 
-        return { text: `AI acknowledges output for ${toolCallId}: "${commandOutput.substring(0, 50)}..." Further processing to be implemented.` };
+            const chat = this.model.startChat({
+                history: this.chatHistory,
+                // tools are already part of the model instance
+            });
+
+            // Send an empty message or a specific prompt to get the AI's reaction to the tool output
+            // For some SDK versions, after a functionResponse, you might send an empty message or a specific follow-up query.
+            // Or, the SDK might handle this as part of a multi-turn chat implicitly.
+            // Let's try sending the functionResponsePart directly as the next message in the chat.
+            const result = await chat.sendMessageStream([functionResponsePart]); // Send stream for potential multi-part response
+            
+            let accumulatedText = "";
+            for await (const chunk of result.stream) {
+                const chunkText = chunk.text();
+                accumulatedText += chunkText;
+            }
+            
+            // Add model's response to history
+            if (accumulatedText) {
+                 this.chatHistory.push({role: "model", parts: [{text: accumulatedText}]});
+            }
+
+            return { text: accumulatedText };
+
+        } catch (error) {
+            console.error('AI Service processToolExecutionResult Error:', error);
+            return { text: `Error processing tool result: ${(error as Error).message}` };
+        }
     }
 }
 
-export { AIService }; // AIResponse is already exported at the top
+export { AIService };
