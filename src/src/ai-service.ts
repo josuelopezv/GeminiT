@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, GenerativeModel, Part, Content, FunctionResponsePart } from '@google/generative-ai'; // Added Content, FunctionResponsePart
+import { GoogleGenerativeAI, GenerativeModel, Content, FunctionResponsePart, ChatSession, Part } from '@google/generative-ai'; // Added Part
 import { EXECUTE_TERMINAL_COMMAND_TOOL } from './ai-tools';
 import { fetchModelsFromGoogle } from './google-ai-utils';
 
@@ -17,7 +17,7 @@ class AIService {
     private model!: GenerativeModel | null;
     private apiKey: string;
     private modelName: string;
-    private chatHistory: Content[] = []; // Changed from Part[] to Content[]
+    private currentChatSession: ChatSession | null = null; // To store the active chat session
 
     constructor(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
@@ -36,7 +36,7 @@ class AIService {
     private initializeWithKeyAndModel(apiKey: string, modelName: string) {
         this.apiKey = apiKey;
         this.modelName = modelName;
-        this.chatHistory = []; // Reset history
+        this.currentChatSession = null; // Reset chat session
 
         if (apiKey && !this.genAI) { 
             try {
@@ -50,14 +50,20 @@ class AIService {
         }
         if (this.genAI && modelName) {
             try {
-                // Tools are now typically passed to the model instance directly
                 this.model = this.genAI.getGenerativeModel({ model: this.modelName, tools: [EXECUTE_TERMINAL_COMMAND_TOOL] });
+                // Initialize chat session here or when first query is made
+                this.currentChatSession = this.model.startChat({ 
+                    history: [], // Start with empty history, or provide initial context
+                    tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
+                }); 
             } catch (error) {
                 console.error(`Error initializing AI Service with model ${modelName}:`, error);
                 this.model = null;
+                this.currentChatSession = null;
             }
         } else {
             this.model = null;
+            this.currentChatSession = null;
         }
     }
 
@@ -73,12 +79,11 @@ class AIService {
                 console.error('Error re-initializing GoogleGenerativeAI in updateApiKeyAndModel:', error);
                 this.genAI = null;
                 this.model = null;
-                this.chatHistory = [];
+                this.currentChatSession = null;
                 return;
             }
         }
-        // Re-initialize model with new settings and reset history
-        this.initializeWithKeyAndModel(apiKey, modelName);
+        this.initializeWithKeyAndModel(apiKey, modelName); // This will re-initialize model and chat
     }
 
     getApiKey(): string {
@@ -94,42 +99,37 @@ class AIService {
     }
 
     async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {
-        if (!this.apiKey || !this.modelName || !this.model) {
-            throw new Error('AI Service is not initialized. API key or Model Name may be missing or invalid.');
-        }
-        try {
-            const userQueryContent: Content = { role: "user", parts: [{ text: query }] };
-            let historyForThisTurn = [...this.chatHistory];
-            historyForThisTurn.push(userQueryContent);
-
-            // Optional: Add terminal history as a separate user message for clarity in history
-            // if (terminalHistory) {
-            //     historyForThisTurn.push({ role: "user", parts: [{ text: "Current terminal context:\n" + terminalHistory }] });
-            // }
-
-            const chat = this.model.startChat({
-                history: historyForThisTurn, // Send a copy of history up to this point
-                // tools are already part of the model instance
-            });
-            
-            const result = await chat.sendMessage(query); // Send only the current query string
-            const response = result.response;
-
-            // Add user query and model response to persistent history
-            this.chatHistory.push(userQueryContent);
-            if (response.candidates && response.candidates.length > 0) {
-                this.chatHistory.push(response.candidates[0].content); 
+        if (!this.currentChatSession) {
+            // Attempt to re-initialize if session is missing but model/key are present
+            if (this.model && this.apiKey && this.modelName) {
+                console.warn('AIService: Chat session was null, attempting to re-initialize.');
+                this.currentChatSession = this.model.startChat({
+                    history: [], // Or some predefined initial history
+                    tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
+                });
             } else {
-                // Handle cases where there might be no candidates (e.g. safety blocked)
-                this.chatHistory.push({role: "model", parts: [{text: "[No response content from model]"}]});
+                 throw new Error('AI Service chat session is not initialized. API key or Model Name may be missing or invalid.');
             }
+        }
+        
+        try {
+            // Construct message parts, including terminal history if relevant for this turn
+            const messageParts: Part[] = [{ text: query }];
+            if (terminalHistory) {
+                // Consider how to best present terminal history. Appending to query or as separate context.
+                // For now, let's assume it's part of the user's broader context for the query.
+                // messageParts.unshift({ text: "Terminal Context:\n" + terminalHistory + "\n\nUser Query:" });
+            }
+
+            const result = await this.currentChatSession.sendMessage(messageParts);
+            const response = result.response;
 
             const functionCalls = response.functionCalls();
             if (functionCalls && functionCalls.length > 0) {
                 const call = functionCalls[0];
                 return {
                     toolCall: {
-                        id: call.name, // This should be the unique ID of the function call if available
+                        id: call.name, // This should be the unique ID of the function call
                         functionName: call.name, 
                         args: call.args as { command?: string }
                     }
@@ -141,14 +141,16 @@ class AIService {
 
         } catch (error) {
             console.error('AI Service processQuery Error:', error);
-            // Don't modify chatHistory here as it might lead to inconsistencies
+            // If sendMessage fails, the chat session might be in a bad state. 
+            // Consider resetting or re-initializing the chat session on certain errors.
+            // this.currentChatSession = null; // Or re-initialize
             throw error;
         }
     }
 
     async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<AIResponse> {
-        if (!this.apiKey || !this.modelName || !this.model) {
-            throw new Error('AI Service is not initialized for tool result processing.');
+        if (!this.currentChatSession) {
+            throw new Error('AI Service chat session is not initialized for tool result processing.');
         }
         console.log(`AIService: Sending tool execution result for ${functionName} (ID: ${toolCallId})`);
         
@@ -156,40 +158,21 @@ class AIService {
             const functionResponsePart: FunctionResponsePart = {
                 functionResponse: {
                     name: functionName, 
-                    response: { name: functionName, content: { output: commandOutput } },
+                    response: { name: functionName, content: { output: commandOutput } }, 
                 }
             };
             
-            // Add the function response part to history
-            this.chatHistory.push({ role: "function", parts: [functionResponsePart] });
+            // Send the function response part using the existing chat session
+            const result = await this.currentChatSession.sendMessage([functionResponsePart]);
+            const response = result.response;
 
-            const chat = this.model.startChat({
-                history: this.chatHistory,
-                // tools are already part of the model instance
-            });
-
-            // Send an empty message or a specific prompt to get the AI's reaction to the tool output
-            // For some SDK versions, after a functionResponse, you might send an empty message or a specific follow-up query.
-            // Or, the SDK might handle this as part of a multi-turn chat implicitly.
-            // Let's try sending the functionResponsePart directly as the next message in the chat.
-            const result = await chat.sendMessageStream([functionResponsePart]); // Send stream for potential multi-part response
-            
-            let accumulatedText = "";
-            for await (const chunk of result.stream) {
-                const chunkText = chunk.text();
-                accumulatedText += chunkText;
-            }
-            
-            // Add model's response to history
-            if (accumulatedText) {
-                 this.chatHistory.push({role: "model", parts: [{text: accumulatedText}]});
-            }
-
-            return { text: accumulatedText };
+            const text = response.text();
+            return { text };
 
         } catch (error) {
             console.error('AI Service processToolExecutionResult Error:', error);
-            return { text: `Error processing tool result: ${(error as Error).message}` };
+            // Consider chat session state here too
+            throw error; // Re-throw so renderer can display a generic error
         }
     }
 }
