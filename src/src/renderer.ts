@@ -276,10 +276,13 @@ aiButton?.addEventListener('click', async () => {
                 const denyBtn = approvalDiv.querySelector('.deny-btn');
 
                 approveBtn?.addEventListener('click', () => {
-                    approvalDiv.innerHTML = `<p>Command approved. Executing: \`${args.command}\` (Execution logic pending)</p>`;
-                    // NEXT STEP: Send IPC to main to execute command and provide toolCallId
-                    // ipcRenderer.send('terminal:execute-tool-command', { command: args.command, toolCallId });
-                    console.log(`Command approved by user: ${args.command}, Tool Call ID: ${toolCallId}`);
+                    approvalDiv.innerHTML = `<p>Executing: \`${args.command}\`...</p>`;
+                    ipcRenderer.send('terminal:execute-tool-command', { 
+                        command: args.command, 
+                        toolCallId, 
+                        terminalId, // Ensure terminalId is available in this scope
+                        originalFunctionName: functionName // Pass the function name
+                    });
                 });
 
                 denyBtn?.addEventListener('click', () => {
@@ -315,6 +318,43 @@ aiButton?.addEventListener('click', async () => {
         const err = error as Error;
         appendMessage('Error', err.message);
     }
+});
+
+// Listener for when the main process sends back the captured output
+ipcRenderer.on('ai:tool-output-captured', (event, { toolCallId, output, error: captureError, originalFunctionName }: { toolCallId: string; output?: string; error?: string; originalFunctionName?: string }) => {
+    if (captureError) {
+        appendMessage('System', `Error capturing output for command (Tool ID: ${toolCallId}): ${captureError}`);
+        // Send this error back to Gemini via aiService.processToolExecutionResult
+        ipcRenderer.invoke('ai:process-tool-result', { 
+            toolCallId, 
+            functionName: originalFunctionName || 'execute_terminal_command', // Pass the original function name
+            commandOutput: `Error capturing output: ${captureError}` // Send error as output
+        }).then((aiFollowUpResponse: AIResponse) => { // Added AIResponse type
+            if (aiFollowUpResponse.text) {
+                appendMessage('AI', aiFollowUpResponse.text);
+            }
+        }).catch(err => {
+            appendMessage('Error', `AI error processing command capture error: ${err.message}`);
+        });
+        return;
+    }
+    appendMessage('System', `Output captured for command (Tool ID: ${toolCallId}). Sending to AI...`);
+    ipcRenderer.invoke('ai:process-tool-result', { 
+        toolCallId, 
+        functionName: originalFunctionName || 'execute_terminal_command', // Pass the original function name
+        commandOutput: output 
+    }).then((aiFollowUpResponse: AIResponse) => { // Added AIResponse type
+        if (aiFollowUpResponse.text) {
+            appendMessage('AI', aiFollowUpResponse.text);
+        } else if (aiFollowUpResponse.toolCall) {
+            // Handle potential subsequent tool calls if the AI decides to run another command
+            // This would involve re-triggering the approval UI logic
+            // For now, just log it or inform the user
+            appendMessage('AI', `AI wants to run another command: ${aiFollowUpResponse.toolCall.args.command} (Further tool chaining not yet implemented)`);
+        }
+    }).catch(err => {
+        appendMessage('Error', `AI error processing command output: ${err.message}`);
+    });
 });
 
 aiInput?.addEventListener('keypress', (e) => {

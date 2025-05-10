@@ -1,5 +1,5 @@
-import { ipcMain, app } from 'electron'; // Added app import
-import { AIService } from '../../ai-service';
+import { ipcMain, app } from 'electron';
+import { AIService, AIResponse } from '../../ai-service'; // Import AIResponse
 import Store from 'electron-store';
 
 interface AppStoreSchemaContents {
@@ -76,6 +76,31 @@ export function initializeAiIpc(aiService: AIService, store: Store<AppStoreSchem
                 console.error('[DEV AI List Models Error]:', err);
             }
             console.error('Error listing AI models in main:', err);
+            throw err; // Re-throw to be caught by renderer's invoke
+        }
+    });
+
+    ipcMain.handle('ai:process-tool-result', async (event, 
+        { toolCallId, functionName, commandOutput }: 
+        { toolCallId: string; functionName: string; commandOutput: string }
+    ): Promise<AIResponse> => {
+        try {
+            if (!app.isPackaged) { // Conditional logging
+                console.log(`[DEV AI Tool Result for ${functionName} (ID: ${toolCallId})]:`, commandOutput.substring(0, 200));
+            }
+            // The AIService needs to be already configured with API key and model via previous calls or initialization
+            const response = await aiService.processToolExecutionResult(toolCallId, functionName, commandOutput);
+            
+            if (!app.isPackaged) { // Conditional logging
+                console.log('[DEV AI Follow-up Response]:', response);
+            }
+            return response;
+        } catch (error) {
+            const err = error as Error;
+            if (!app.isPackaged) { // Conditional logging for errors
+                console.error('[DEV AI Processing Tool Result Error]:', err);
+            }
+            console.error('Error processing AI tool result in main:', err);
             throw err; // Re-throw to be caught by renderer's invoke
         }
     });
