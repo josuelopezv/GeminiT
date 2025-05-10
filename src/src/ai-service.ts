@@ -99,29 +99,48 @@ class AIService {
     }
 
     async processQuery(query: string, terminalHistory: string): Promise<AIResponse> {
-        if (!this.currentChatSession) {
-            // Attempt to re-initialize if session is missing but model/key are present
-            if (this.model && this.apiKey && this.modelName) {
-                console.warn('AIService: Chat session was null, attempting to re-initialize.');
-                this.currentChatSession = this.model.startChat({
-                    history: [], // Or some predefined initial history
-                    tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
-                });
-            } else {
-                 throw new Error('AI Service chat session is not initialized. API key or Model Name may be missing or invalid.');
-            }
+        if (!this.apiKey || !this.modelName || !this.model) {
+            throw new Error('AI Service is not initialized. API key or Model Name may be missing or invalid.');
         }
-        
         try {
-            // Construct message parts, including terminal history if relevant for this turn
-            const messageParts: Part[] = [{ text: query }];
-            if (terminalHistory) {
-                // Consider how to best present terminal history. Appending to query or as separate context.
-                // For now, let's assume it's part of the user's broader context for the query.
-                // messageParts.unshift({ text: "Terminal Context:\n" + terminalHistory + "\n\nUser Query:" });
+            // Define the initial context and instructions for the AI
+            const initialModelInstruction = `You are a helpful and friendly AI assistant integrated into a terminal application.
+            The user is on Windows 11.
+            Your primary goal is to assist with terminal commands and queries.
+            
+            Instructions for your responses:
+            1. When providing command line examples or code snippets, encapsulate them in markdown code blocks.
+            2. For PowerShell commands, use \`\`\`powershell\`\`\` as the language identifier.
+            3. For other shell commands (e.g., cmd, bash), use \`\`\`sh\`\`\`.
+            4. ALWAYS provide commands on a single line; do not break them into multiple lines.
+            5. Keep your explanations concise and to the point.
+            6. If you decide to execute a command, you MUST use the 'execute_terminal_command' tool.
+
+            Here is some recent terminal history for context (if available):
+            ${terminalHistory || 'No recent terminal history available.'}`;
+
+            // If currentChatSession is null or needs to be reset based on history, re-initialize.
+            // For simplicity, let's assume initializeWithKeyAndModel correctly sets up currentChatSession.
+            // If not, ensure it's valid here.
+            if (!this.currentChatSession) {
+                if (this.model) {
+                    this.currentChatSession = this.model.startChat({
+                        history: [
+                            { role: "user", parts: [{ text: initialModelInstruction }] },
+                            { role: "model", parts: [{ text: "Understood. I will follow these instructions and use the execute_terminal_command tool when appropriate." }] }
+                        ],
+                        tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
+                    });
+                } else {
+                    throw new Error('AI Model not available to start chat session.');
+                }
+            } else {
+                // If chat session exists, we might want to ensure its history is appropriate.
+                // For now, we assume the existing session is fine or re-initialized if API key/model changed.
+                // If terminalHistory changes significantly per query, the chat history might need more careful management.
             }
 
-            const result = await this.currentChatSession.sendMessage(messageParts);
+            const result = await this.currentChatSession.sendMessage(query);
             const response = result.response;
 
             const functionCalls = response.functionCalls();
@@ -129,7 +148,7 @@ class AIService {
                 const call = functionCalls[0];
                 return {
                     toolCall: {
-                        id: call.name, // This should be the unique ID of the function call
+                        id: call.name, 
                         functionName: call.name, 
                         args: call.args as { command?: string }
                     }
@@ -137,13 +156,13 @@ class AIService {
             }
 
             const text = response.text();
+            // The regex parsing for "Command:" and "Explanation:" might become less necessary
+            // if the AI consistently uses tool calls for executable commands.
+            // However, it can remain as a fallback for purely textual suggestions.
             return { text };
 
         } catch (error) {
             console.error('AI Service processQuery Error:', error);
-            // If sendMessage fails, the chat session might be in a bad state. 
-            // Consider resetting or re-initializing the chat session on certain errors.
-            // this.currentChatSession = null; // Or re-initialize
             throw error;
         }
     }

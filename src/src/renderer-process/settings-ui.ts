@@ -1,65 +1,11 @@
 import { ipcRenderer } from 'electron';
 import * as DOM from './dom-elements';
-import { appendMessage } from './ui-utils';
-import { AIResponse } from '../ai-service'; // For AIResponse type if needed for error display
+// Removed appendMessage import as it might not be directly needed here anymore, or keep if errors are shown via it.
+import { fetchAndPopulateModels, populateModelDropdown } from './model-select';
 
-export let hasValidApiKey = false;
-export let currentModelName = '';
-
-function populateModelDropdown(models: string[], selectedModel?: string) {
-    if (!DOM.modelNameInput) return;
-    DOM.modelNameInput.innerHTML = ''; // Clear existing options
-
-    if (models.length === 0) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'No compatible models found or API key invalid.';
-        DOM.modelNameInput.appendChild(option);
-        if (DOM.refreshModelsBtn) DOM.refreshModelsBtn.style.display = 'inline';
-        return;
-    }
-
-    if (DOM.refreshModelsBtn) DOM.refreshModelsBtn.style.display = 'none';
-
-    models.forEach(model => {
-        const option = document.createElement('option');
-        option.value = model;
-        option.textContent = model;
-        if (model === selectedModel) {
-            option.selected = true;
-        }
-        DOM.modelNameInput.appendChild(option);
-    });
-
-    if (selectedModel && models.includes(selectedModel)) {
-        DOM.modelNameInput.value = selectedModel;
-    } else if (currentModelName && models.includes(currentModelName)) {
-        DOM.modelNameInput.value = currentModelName;
-    } else if (models.length > 0) {
-        DOM.modelNameInput.value = models[0];
-        currentModelName = models[0]; // Update currentModelName if we default
-        ipcRenderer.invoke('settings:set-model-name', currentModelName);
-    }
-}
-
-async function fetchAndPopulateModels(currentSelectedModel?: string) {
-    if (!hasValidApiKey) {
-        populateModelDropdown([], currentSelectedModel);
-        if (DOM.refreshModelsBtn) DOM.refreshModelsBtn.style.display = 'inline';
-        return;
-    }
-    try {
-        if (DOM.modelNameInput) DOM.modelNameInput.innerHTML = '<option value="">Loading models...</option>';
-        const models: string[] = await ipcRenderer.invoke('ai:list-models');
-        populateModelDropdown(models, currentSelectedModel || currentModelName);
-    } catch (error) {
-        const err = error as Error;
-        console.error('Error fetching models:', err);
-        appendMessage('Error', `Failed to load models: ${err.message}`);
-        populateModelDropdown([], currentSelectedModel || currentModelName);
-        if (DOM.refreshModelsBtn) DOM.refreshModelsBtn.style.display = 'inline';
-    }
-}
+// State variables managed by this module
+let hasValidApiKey = false;
+const currentModelNameRef = { value: '' }; // Use a ref object for mutable state shared with model-select
 
 export async function loadSettings() {
     const savedKey = await ipcRenderer.invoke('settings:get-api-key');
@@ -69,23 +15,23 @@ export async function loadSettings() {
     }
     const savedModelName = await ipcRenderer.invoke('settings:get-model-name');
     if (savedModelName) {
-        currentModelName = savedModelName;
-        if (DOM.modelNameInput) DOM.modelNameInput.value = savedModelName;
+        currentModelNameRef.value = savedModelName;
+        // Initial value for the dropdown, populateModelDropdown will select it if valid
+        if (DOM.modelNameInput) DOM.modelNameInput.value = savedModelName; 
     }
     if (hasValidApiKey) {
-        await fetchAndPopulateModels(currentModelName);
+        await fetchAndPopulateModels(hasValidApiKey, currentModelNameRef);
+    } else {
+        // Ensure dropdown is in a sensible state if no API key yet
+        populateModelDropdown([], undefined, currentModelNameRef);
     }
 }
 
 export function initializeSettingsPanel() {
     DOM.settingsBtn?.addEventListener('click', () => {
         DOM.settingsPanel?.classList.add('visible');
-        if (hasValidApiKey) {
-            fetchAndPopulateModels(currentModelName);
-        } else {
-            populateModelDropdown([], currentModelName);
-            if (DOM.refreshModelsBtn) DOM.refreshModelsBtn.style.display = 'inline';
-        }
+        // Fetch models when panel opens, using current state
+        fetchAndPopulateModels(hasValidApiKey, currentModelNameRef);
     });
 
     DOM.settingsCloseBtn?.addEventListener('click', () => {
@@ -98,10 +44,10 @@ export function initializeSettingsPanel() {
         if (newKey) {
             await ipcRenderer.invoke('settings:set-api-key', newKey);
             hasValidApiKey = true;
-            fetchAndPopulateModels(currentModelName);
+            fetchAndPopulateModels(hasValidApiKey, currentModelNameRef); // Fetch models after API key is set
         } else {
             hasValidApiKey = false;
-            populateModelDropdown([], currentModelName);
+            populateModelDropdown([], undefined, currentModelNameRef); // Corrected typo here
             if (DOM.refreshModelsBtn) DOM.refreshModelsBtn.style.display = 'inline';
         }
     });
@@ -111,23 +57,23 @@ export function initializeSettingsPanel() {
         const newModelName = DOM.modelNameInput.value;
         if (newModelName) {
             await ipcRenderer.invoke('settings:set-model-name', newModelName);
-            currentModelName = newModelName;
+            currentModelNameRef.value = newModelName; // Update the ref
         }
     });
 
     DOM.refreshModelsBtn?.addEventListener('click', () => {
-        fetchAndPopulateModels(currentModelName);
+        fetchAndPopulateModels(hasValidApiKey, currentModelNameRef);
     });
 
     loadSettings(); // Initial load of settings
 }
 
-// Getter for currentModelName to be used by ai-interface.ts
+// Getters for state needed by other modules (e.g., ai-interface.ts)
 export function getCurrentModelName(): string {
-    return DOM.modelNameInput?.value || currentModelName;
+    // Prefer the live value from the dropdown if available, otherwise the ref
+    return DOM.modelNameInput?.value || currentModelNameRef.value;
 }
 
-// Getter for hasValidApiKey
 export function getHasValidApiKey(): boolean {
     return hasValidApiKey;
 }

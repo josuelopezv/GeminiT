@@ -1,7 +1,18 @@
 import { ipcMain } from 'electron';
 import * as os from 'os';
-import { spawnPtyProcess, writeToPty, resizePty, shells, IPtyProcess } from '../pty-manager'; // Import shells
+import { spawnPtyProcess, writeToPty, resizePty, shells, IPtyProcess } from '../pty-manager';
 import { getMainWindow } from '../window-manager';
+import { IDisposable } from 'node-pty'; // Import IDisposable
+
+// Utility to strip ANSI escape codes and other common control characters like backspace.
+function stripAnsiCodes(str: string): string {
+    const ansiRegex = /[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+    let cleanedStr = str.replace(ansiRegex, '');
+    cleanedStr = cleanedStr.replace(/\b/g, ''); // Remove backspace characters
+    // Add removal of carriage return if it's causing issues, but be cautious as it might be legitimate line ending
+    // cleanedStr = cleanedStr.replace(/\r/g, ''); 
+    return cleanedStr;
+}
 
 export function initializeTerminalIpc() {
     ipcMain.on('terminal:create', (event, id: string) => {
@@ -46,7 +57,7 @@ export function initializeTerminalIpc() {
 
     ipcMain.on('terminal:execute-tool-command', async (event, 
         { command, toolCallId, terminalId, originalFunctionName }: 
-        { command: string; toolCallId: string; terminalId: string; originalFunctionName: string } // Added originalFunctionName
+        { command: string; toolCallId: string; terminalId: string; originalFunctionName: string }
     ) => {
         const mainWindow = getMainWindow();
         if (!mainWindow) return;
@@ -54,115 +65,133 @@ export function initializeTerminalIpc() {
         const ptyProcess = shells.get(terminalId);
         if (!ptyProcess) {
             console.error(`PTY process not found for terminal ID: ${terminalId}`);
-            // Send error back to renderer, including originalFunctionName for context
-            event.sender.send('ai:tool-output-captured', { 
-                toolCallId, 
-                error: 'PTY process not found', 
-                originalFunctionName 
-            });
+            event.sender.send('ai:tool-output-captured', { toolCallId, error: 'PTY process not found', originalFunctionName });
             return;
         }
 
-        const endMarker = `__TOOL_CMD_OUTPUT_END_${toolCallId}__`;
+        const endMarker = `__TOOL_CMD_OUTPUT_END_${Date.now()}_${toolCallId}__`;
         let capturedOutput = '';
         let commandOutputFinished = false;
+        let dataListenerDisposable: IDisposable | null = null;
+
+        const commandLinesSent = command.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+        const printfCommandSent = `printf "%s\n" "${endMarker}"`.trim();
+        const commandToExecuteWithMarker = `${command}\n${printfCommandSent}\n`;
+        
+        console.log(`[DEBUG ${toolCallId}] User command lines:`, commandLinesSent);
+        console.log(`[DEBUG ${toolCallId}] Printf command:`, printfCommandSent);
+        console.log(`[DEBUG ${toolCallId}] Executing with marker: ${JSON.stringify(commandToExecuteWithMarker)}`);
 
         const toolOutputListener = (data: string) => {
             if (commandOutputFinished) return;
-
+            // console.log(`[DEBUG ${toolCallId}] Raw data chunk received: ${JSON.stringify(data)}`);
             capturedOutput += data;
+            // console.log(`[DEBUG ${toolCallId}] Accumulated capturedOutput (before marker check): ${JSON.stringify(capturedOutput)}`);
+
             const markerIndex = capturedOutput.indexOf(endMarker);
 
             if (markerIndex !== -1) {
+                console.log(`[DEBUG ${toolCallId}] End marker found at index: ${markerIndex}`);
                 commandOutputFinished = true;
-                // Clean up the captured output by removing the marker and anything after it from this specific data chunk
-                // and also the command that printed the marker.
-                // This is a simplification; a more robust way would be to clean based on exact command echo.
-                capturedOutput = capturedOutput.substring(0, markerIndex);
-                // Remove the command that echoed the marker if it was captured (e.g. "echo __END__\r\n")
-                // This regex is a basic attempt and might need refinement based on shell behavior.
-                capturedOutput = capturedOutput.replace(new RegExp(`echo\s+${endMarker}\s*\r?\n?`, 'g'), '').trim();
-                
-                // Remove the temporary listener
-                // For node-pty, if onData is like EventEmitter.on, we need to store the exact function reference to remove it.
-                // ptyProcess.removeListener('data', toolOutputListener); // This is typical for EventEmitter
-                // However, node-pty's IPtyProcess.onData might just take one callback. 
-                // If it overwrites, we need to restore the original. If it adds, we need to remove.
-                // For simplicity, assuming node-pty allows multiple listeners or we manage this carefully.
-                // A robust way: node-pty's onData returns a disposable { dispose: () => void; }
-                // Let's assume for now we can't easily remove just one listener without that pattern.
-                // This part needs careful handling based on node-pty's exact API for multiple listeners or disposables.
-                // For now, the commandOutputFinished flag will prevent further processing by this listener.
+                if (dataListenerDisposable) {
+                    dataListenerDisposable.dispose();
+                    dataListenerDisposable = null;
+                }
 
-                console.log(`[Tool Command Output for ${toolCallId} (${originalFunctionName})]:\n`, capturedOutput);
+                let outputBeforeMarker = capturedOutput.substring(0, markerIndex);
+                console.log(`[DEBUG ${toolCallId}] Output before ANSI stripping (substring to marker): ${JSON.stringify(outputBeforeMarker)}`);
+                let strippedOutput = stripAnsiCodes(outputBeforeMarker);
+                console.log(`[DEBUG ${toolCallId}] Output after ANSI stripping: ${JSON.stringify(strippedOutput)}`);
 
-                // NEXT STEP: Send this capturedOutput and toolCallId to the AI service
-                // Example: mainWindow.webContents.send('ai:process-tool-result', { toolCallId, output: capturedOutput });
-                // Or better: ipcMain.invoke('ai:process-tool-result', { toolCallId, functionName: "execute_terminal_command", output: capturedOutput });
-                // This will be handled by ai-ipc.ts
+                const lines = strippedOutput.split(/\r?\n/);
+                const cleanedLines: string[] = [];
+                console.log(`[DEBUG ${toolCallId}] Lines before echo/prompt cleaning:`, lines);
+
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    let lineToKeep = true;
+
+                    // Check if the line exactly matches any of the sent command lines
+                    if (commandLinesSent.includes(trimmedLine)) {
+                        console.log(`[DEBUG ${toolCallId}] Discarding line (exact match to sent command): ${JSON.stringify(line)}`);
+                        lineToKeep = false;
+                    }
+                    // Check if the line exactly matches the printf command
+                    else if (trimmedLine === printfCommandSent) {
+                        console.log(`[DEBUG ${toolCallId}] Discarding line (exact match to printf command): ${JSON.stringify(line)}`);
+                        lineToKeep = false;
+                    }
+                    // A very basic prompt removal (e.g., lines ending with > or $ followed by space)
+                    // This is highly heuristic and might remove legitimate output.
+                    // else if (trimmedLine.match(/^[^a-zA-Z0-9]*[>#\$]\s*$/) && lines.indexOf(line) === 0) {
+                    //     console.log(`[DEBUG ${toolCallId}] Discarding line (looks like a prompt at start): ${JSON.stringify(line)}`);
+                    //     lineToKeep = false;
+                    // }
+
+                    if (lineToKeep) {
+                        cleanedLines.push(line); // Keep the original line, not trimmed, to preserve formatting if any
+                    }
+                }
+                let finalOutput = cleanedLines.join('\n').trim(); // Trim overall, but individual lines retain their space if not prompts
+                console.log(`[DEBUG ${toolCallId}] Output after echo/prompt cleaning: ${JSON.stringify(finalOutput)}`);
+
+                console.log(`[Tool Command Output for ${toolCallId} (${originalFunctionName})]:\n'${finalOutput}'`);
                 event.sender.send('ai:tool-output-captured', { 
                     toolCallId, 
-                    output: capturedOutput, 
-                    originalFunctionName // Pass it back
+                    output: finalOutput, 
+                    originalFunctionName
                 });
             }
         };
 
-        // Attaching the listener: node-pty's onData typically returns an IDisposable.
-        // We should store and call dispose() on it when done.
-        // If onData doesn't return IDisposable or allow multiple distinct listeners, this approach needs rethinking.
-        // For now, let's assume it adds the listener.
-        // A proper implementation would require checking node-pty docs for listener management.
-        // Let's assume a simplified scenario where the original onData in pty-manager continues to run for the main terminal display.
-        // This temporary listener is just for capturing this specific command's output.
-        
-        // This is a conceptual problem: If ptyProcess.onData only supports one listener (the one in pty-manager.ts
-        // that sends all data to the renderer), then this temporary listener approach won't work as is.
-        // We would need pty-manager to provide a way to intercept or tap into the stream for a specific command.
-
-        // For now, let's proceed with the assumption that we can add a temporary listener
-        // or that the main listener in pty-manager can be augmented.
-        // A simple (but less clean) way if onData is singular: replace it, then restore it.
-
-        // Given the current structure of pty-manager, the onData callback is set once.
-        // To make this work cleanly, pty-manager would need to support broadcasting to multiple listeners
-        // or provide a specific mechanism for command output capture.
-
-        // Let's simulate by directly using the ptyProcess if it's accessible and allows adding listeners.
-        // The `ptyProcess.onData(onDataCallback)` in `pty-manager` sets the primary listener.
-        // If `IPtyProcess.onData` is like `EventEmitter.on`, this is fine.
-        // If it's a setter for a single callback, this will override the main one.
-        // The type definition `onData: (callback: (data: string) => void) => void;` suggests it might be a setter.
-        // Let's assume it's an event emitter for now for the sake of progressing.
-        const ptyDataEmitter = ptyProcess as any; // Cast to any to access 'on' if it's an event emitter
-        if (typeof ptyDataEmitter.on === 'function' && typeof ptyDataEmitter.removeListener === 'function') {
-            ptyDataEmitter.on('data', toolOutputListener);
-        } else {
-            console.warn('PTY process does not seem to be a standard event emitter for multiple data listeners. Output capture for tools might be unreliable.');
-            // Fallback: we can't reliably capture isolated output with current pty-manager structure for this.
-            // For now, we will proceed but this is a known limitation.
+        // Attach the listener using ptyProcess.onData which returns IDisposable
+        try {
+            dataListenerDisposable = ptyProcess.onData(toolOutputListener);
+        } catch (e) {
+            console.error('Error attaching data listener to PTY:', e);
+            event.sender.send('ai:tool-output-captured', { 
+                toolCallId, 
+                error: 'Cannot attach listener to PTY for output capture.', 
+                originalFunctionName 
+            });
+            return;
         }
+        
+        writeToPty(terminalId, commandToExecuteWithMarker);
 
-        // Execute the command and then echo the marker
-        const commandToExecute = `${command}\necho ${endMarker}\n`;
-        writeToPty(terminalId, commandToExecute);
-
-        // Set a timeout to remove the listener and handle cases where the marker might not appear
         setTimeout(() => {
             if (!commandOutputFinished) {
-                commandOutputFinished = true; // Stop processing
-                if (typeof ptyDataEmitter.removeListener === 'function') {
-                    ptyDataEmitter.removeListener('data', toolOutputListener);
+                commandOutputFinished = true; 
+                if (dataListenerDisposable) {
+                    dataListenerDisposable.dispose();
+                    dataListenerDisposable = null;
                 }
-                console.warn(`Timeout waiting for end marker for tool call ${toolCallId}. Output might be incomplete.`);
-                // Send what was captured anyway, or an error
+                console.log(`[DEBUG ${toolCallId}] Timeout occurred. Initial capturedOutput: ${JSON.stringify(capturedOutput)}`);
+                let timedOutOutput = stripAnsiCodes(capturedOutput);
+                const markerIdx = timedOutOutput.indexOf(endMarker);
+                if (markerIdx !== -1) {
+                    timedOutOutput = timedOutOutput.substring(0, markerIdx);
+                }
+                // Apply a simplified cleaning for timeout
+                const lines = timedOutOutput.split(/\r?\n/);
+                const cleanedLines: string[] = [];
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (!commandLinesSent.includes(trimmedLine) && trimmedLine !== printfCommandSent && !trimmedLine.includes(endMarker)) {
+                        cleanedLines.push(line);
+                    }
+                }
+                timedOutOutput = cleanedLines.join('\n').trim();
+                console.log(`[DEBUG ${toolCallId}] Timeout: Output after final cleaning: ${JSON.stringify(timedOutOutput)}`);
+
+                console.warn(`Timeout waiting for end marker for tool call ${toolCallId}. Output might be incomplete: '${timedOutOutput}'`);
                 event.sender.send('ai:tool-output-captured', { 
                     toolCallId, 
-                    output: capturedOutput, 
+                    output: timedOutOutput,
                     error: 'Timeout waiting for end marker', 
-                    originalFunctionName // Pass it back
+                    originalFunctionName
                 });
             }
-        }, 5000); // 5 second timeout for the command to complete and marker to appear
+        }, 7000);
     });
 }

@@ -1,12 +1,13 @@
 import * as os from 'os';
 import * as child_process from 'child_process';
+import { IDisposable } from 'node-pty'; // Import IDisposable from node-pty
 
 // Import node-pty with error handling and type definition
 export interface IPtyProcess {
     pid: number;
     write: (data: string) => void;
     resize: (cols: number, rows: number) => void;
-    onData: (callback: (data: string) => void) => void;
+    onData: (callback: (data: string) => void) => IDisposable; // Corrected return type
     kill: (signal?: string) => void; // Added kill for cleanup
 }
 
