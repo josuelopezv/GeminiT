@@ -18,7 +18,7 @@ const mockAiProvider: jest.Mocked<IAiProvider> = {
 // Mock the IChatManager
 const mockChatManager: jest.Mocked<IChatManager> = {
     sendMessage: jest.fn(),
-    sendFunctionResponse: jest.fn(),
+    // sendFunctionResponse: jest.fn(), // Removed as it's no longer in IChatManager
     updateCredentials: jest.fn(),
 };
 
@@ -43,7 +43,7 @@ describe('AIService', () => {
         
         // IChatManager methods should resolve with IChatResponse
         mockChatManager.sendMessage.mockResolvedValue(createMockChatResponseText('mock chat manager response'));
-        mockChatManager.sendFunctionResponse.mockResolvedValue(createMockChatResponseText('mock chat manager function response'));
+        // mockChatManager.sendFunctionResponse.mockResolvedValue(createMockChatResponseText('mock chat manager function response')); // Removed
         // mockChatManager.updateCredentials.mockImplementation(() => {}); // No return value needed for void
     });
 
@@ -131,32 +131,6 @@ describe('AIService', () => {
             expect(result).toEqual({ text: responseText });
         });
 
-        test('should process function call response from chatManager', async () => {
-            const query = 'test query';
-            const functionCallName = 'testFunction';
-            const functionCallArgs = { arg1: 'value1' };
-            const mockFunctionCallResponse: IChatResponse = {
-                candidates: [{
-                    content: {
-                        parts: [{ functionCall: { name: functionCallName, args: functionCallArgs } }],
-                        role: 'model'
-                    }
-                }]
-            };
-            mockChatManager.sendMessage.mockResolvedValueOnce(mockFunctionCallResponse);
-
-            const result = await service.processQuery(query, '');
-
-            expect(result).toEqual({
-                toolCall: {
-                    id: functionCallName, // AIService uses functionCall.name as id for now
-                    functionName: functionCallName,
-                    args: functionCallArgs
-                }
-            });
-            expect(service['currentToolCallId']).toBe(functionCallName);
-        });
-
         test('should throw error if chatManager is not initialized', async () => {
             // Sabotage chatManager initialization for this test
             mockAiProvider.createChatManager.mockReturnValueOnce(null as any); // Force chatManager to be null
@@ -190,78 +164,6 @@ describe('AIService', () => {
         });
     });
 
-    // Tests for processToolExecutionResult
-    describe('processToolExecutionResult', () => {
-        const apiKey = 'test-key';
-        const modelName = 'test-model';
-        let service: AIService;
-        const toolCallId = 'testToolCallId';
-        const functionName = 'testFunction';
-        const commandOutput = 'tool output';
-
-        beforeEach(() => {
-            service = new AIService(mockAiProvider, apiKey, modelName, 'Instruction');
-            // Simulate a tool call being in progress
-            service['currentToolCallId'] = toolCallId;
-        });
-
-        test('should call sendFunctionResponse on chatManager with tool output', async () => {
-            const expectedFunctionResponseParts: GenericMessagePart[] = [
-                { functionResponse: { name: functionName, response: { output: commandOutput } } }
-            ];
-            mockChatManager.sendFunctionResponse.mockResolvedValueOnce(createMockChatResponseText('response after tool'));
-
-            await service.processToolExecutionResult(toolCallId, functionName, commandOutput);
-
-            expect(mockChatManager.sendFunctionResponse).toHaveBeenCalledWith(expectedFunctionResponseParts);
-        });
-
-        test('should process text response after tool execution and reset currentToolCallId', async () => {
-            const responseText = 'AI response after tool execution';
-            mockChatManager.sendFunctionResponse.mockResolvedValueOnce(createMockChatResponseText(responseText));
-
-            const result = await service.processToolExecutionResult(toolCallId, functionName, commandOutput);
-
-            expect(result).toEqual({ text: responseText });
-            expect(service['currentToolCallId']).toBeNull();
-        });
-
-        test('should throw error if chatManager is not initialized', async () => {
-            mockAiProvider.createChatManager.mockReturnValueOnce(null as any); // Force chatManager to be null
-            const newService = new AIService(mockAiProvider, apiKey, modelName, 'Instruction');
-            // No need to set currentToolCallId on newService as it will throw before using it
-
-            await expect(newService.processToolExecutionResult(toolCallId, functionName, commandOutput))
-                .rejects.toThrow('Chat manager is not initialized.');
-        });
-
-        test('should re-throw error from chatManager sendFunctionResponse and reset currentToolCallId', async () => {
-            const errorMessage = 'Chat manager error during function response';
-            mockChatManager.sendFunctionResponse.mockRejectedValueOnce(new Error(errorMessage));
-
-            await expect(service.processToolExecutionResult(toolCallId, functionName, commandOutput))
-                .rejects.toThrow(errorMessage);
-            expect(service['currentToolCallId']).toBeNull(); // Should be reset even on error
-        });
-        
-        test('should handle no suitable text response after tool execution', async () => {
-            const mockEmptyResponse: IChatResponse = {
-                candidates: [{
-                    content: {
-                        parts: [], // No text part
-                        role: 'model'
-                    }
-                }]
-            };
-            mockChatManager.sendFunctionResponse.mockResolvedValueOnce(mockEmptyResponse);
-
-            const result = await service.processToolExecutionResult(toolCallId, functionName, commandOutput);
-            expect(result).toEqual({ text: 'Tool executed, but no further textual response from AI.' });
-            expect(service['currentToolCallId']).toBeNull();
-        });
-    });
-
-    // Tests for updateApiKeyAndModel
     describe('updateApiKeyAndModel', () => {
         const initialApiKey = 'initial-key';
         const initialModelName = 'initial-model';
@@ -284,7 +186,6 @@ describe('AIService', () => {
             
             const newMockChatManager: jest.Mocked<IChatManager> = {
                 sendMessage: jest.fn(),
-                sendFunctionResponse: jest.fn(),
                 updateCredentials: jest.fn(),
             };
             mockAiProvider.createChatManager.mockReturnValueOnce(newMockChatManager);

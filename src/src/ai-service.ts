@@ -9,7 +9,6 @@ class AIService implements IServiceInterface {
     private apiKey: string;
     private modelName: string;
     private initialModelInstruction: string;
-    private currentToolCallId: string | null = null;
 
     constructor(aiProvider: IAiProvider, apiKey: string, modelName: string, initialModelInstruction: string = '') {
         this.aiProvider = aiProvider;
@@ -100,62 +99,17 @@ class AIService implements IServiceInterface {
             if (chatResponse && chatResponse.candidates && chatResponse.candidates.length > 0) {
                 const candidate = chatResponse.candidates[0];
                 if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
-                    const part = candidate.content.parts[0];
-                    if (part.functionCall) {
-                        this.currentToolCallId = part.functionCall.name;
-                        logger.info('Function call received:', part.functionCall);
-                        return {
-                            toolCall: {
-                                id: this.currentToolCallId,
-                                functionName: part.functionCall.name,
-                                args: part.functionCall.args
-                            }
-                        };
-                    }
-                    if (part.text) {
+                    const textPart = candidate.content.parts.find(part => part.text !== undefined && part.text !== null);
+                    if (textPart && typeof textPart.text === 'string') {
                         logger.info('Text response received.');
-                        return { text: part.text };
+                        return { text: textPart.text };
                     }
                 }
             }
-            logger.warn('No suitable response (text or function call) found in AI candidate.');
+            logger.warn('No suitable text response found in AI candidate.');
             return { text: 'No response from AI.' };
         } catch (error) {
             logger.error('Error processing query with chat manager:', error);
-            throw error;
-        }
-    }
-
-    public async processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IServiceAIResponse> {
-        if (!this.chatManager) {
-            logger.error('Chat manager is not initialized. Cannot process tool execution result.');
-            throw new Error('Chat manager is not initialized.');
-        }
-
-        const functionResponseParts: GenericMessagePart[] = [
-            { functionResponse: { name: functionName, response: { output: commandOutput } } }
-        ];
-
-        try {
-            logger.debug('Processing tool execution result with chat manager:', functionResponseParts);
-            const chatResponse = await this.chatManager.sendFunctionResponse(functionResponseParts);
-            this.currentToolCallId = null;
-
-            if (chatResponse && chatResponse.candidates && chatResponse.candidates.length > 0) {
-                const candidate = chatResponse.candidates[0];
-                if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
-                    const part = candidate.content.parts[0];
-                    if (part.text) {
-                        logger.info('Text response received after tool execution.');
-                        return { text: part.text };
-                    }
-                }
-            }
-            logger.warn('No suitable text response found in AI candidate after tool execution.');
-            return { text: 'Tool executed, but no further textual response from AI.' };
-        } catch (error) {
-            logger.error('Error processing tool execution result with chat manager:', error);
-            this.currentToolCallId = null;
             throw error;
         }
     }

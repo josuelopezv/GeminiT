@@ -5,10 +5,8 @@ import {
     Part, 
     ChatSession, 
     FunctionResponsePart,
-    GenerateContentResponse,
-    FunctionCall
+    GenerateContentResponse
 } from '@google/generative-ai';
-import { EXECUTE_TERMINAL_COMMAND_TOOL } from './ai-tools';
 import { 
     IChatManager, 
     IChatResponse, 
@@ -45,8 +43,7 @@ export class GeminiChatSessionManager implements IChatManager {
                 this.genAI = new GoogleGenerativeAI(this.apiKey);
                 if (this.modelName && this.genAI) {
                     this.modelInstance = this.genAI.getGenerativeModel({ 
-                        model: this.modelName, 
-                        tools: [EXECUTE_TERMINAL_COMMAND_TOOL] 
+                        model: this.modelName
                     });
                     this.startNewChatSession();
                     logger.info(`SDK and model initialized for: ${this.modelName}`);
@@ -74,11 +71,10 @@ export class GeminiChatSessionManager implements IChatManager {
         }
         this.chatHistory = [
             { role: "user", parts: [{ text: this.initialModelInstruction }] },
-            { role: "model", parts: [{ text: "Understood. I will follow these instructions and use the execute_terminal_command tool when appropriate." }] }
+            { role: "model", parts: [{ text: "Understood. I will follow these instructions and provide commands in markdown code blocks." }] }
         ];
         this.currentChatSession = this.modelInstance.startChat({
-            history: this.chatHistory,
-            tools: [EXECUTE_TERMINAL_COMMAND_TOOL]
+            history: this.chatHistory
         });
         logger.info('New chat session started.');
     }
@@ -118,11 +114,8 @@ export class GeminiChatSessionManager implements IChatManager {
             if ('functionResponse' in p) {
                 return { functionResponse: p.functionResponse } as FunctionResponsePart;
             }
-            if ('functionCall' in p && p.functionCall) {
-                 logger.warn('Mapping GenericMessagePart with functionCall to Gemini Part - this is unusual for sending.');
-                 return { functionCall: p.functionCall as FunctionCall }; 
-            }
-            throw new Error('Unsupported GenericMessagePart type for Gemini mapping');
+            logger.warn('Unknown part type in mapGenericPartsToGeminiParts', p);
+            return { text: '[Unsupported part type]' };
         });
     }
 
@@ -132,16 +125,13 @@ export class GeminiChatSessionManager implements IChatManager {
                 const iPart: IChatCompletionPart = {};
                 if (part.text) iPart.text = part.text;
                 if (part.functionCall) {
-                    iPart.functionCall = {
-                        name: part.functionCall.name,
-                        args: part.functionCall.args
-                    };
+                    logger.warn('A functionCall part was unexpectedly received from Gemini despite tools being removed:', part.functionCall);
                 }
                 return iPart;
             });
             return {
                 content: {
-                    parts: parts,
+                    parts: parts.filter(p => p.text !== undefined),
                     role: candidate.content?.role
                 }
             };
@@ -178,29 +168,6 @@ export class GeminiChatSessionManager implements IChatManager {
             if (this.chatHistory.length > 0 && this.chatHistory[this.chatHistory.length -1].role === "user") {
                 this.chatHistory.pop();
             }
-            throw error;
-        }
-    }
-
-    public async sendFunctionResponse(functionResponseGenericParts: GenericMessagePart[]): Promise<IChatResponse | null> {
-        if (!this.currentChatSession) {
-            logger.error('No active chat session for sendFunctionResponse.');
-            return null;
-        }
-        try {
-            const geminiFunctionResponseParts = this.mapGenericPartsToGeminiParts(functionResponseGenericParts) as FunctionResponsePart[];
-            this.addToHistory({ role: "function", parts: geminiFunctionResponseParts });
-            logger.debug('Sending function response to Gemini:', functionResponseGenericParts);
-
-            const result = await this.currentChatSession.sendMessage(geminiFunctionResponseParts);
-            logger.debug('Received response from Gemini after function response.');
-            
-            if (result.response.candidates && result.response.candidates.length > 0) {
-                this.addToHistory(result.response.candidates[0].content);
-            }
-            return this.mapGeminiResponseToIChatResponse(result.response);
-        } catch (error) {
-            logger.error('ChatManager.sendFunctionResponse error:', error);
             throw error;
         }
     }

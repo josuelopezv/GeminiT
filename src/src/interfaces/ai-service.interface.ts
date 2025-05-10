@@ -36,9 +36,8 @@ export interface IChatResponse {
 export type GenericMessagePart = { text: string } | { functionResponse: { name: string; response: any } } | { functionCall: { name: string; args: any } };
 
 export interface IChatManager {
-    updateCredentials(apiKey: string, modelName: string): void;
+    updateCredentials(apiKey: string, modelName: string, newInitialModelInstruction?: string): void; // Added newInitialModelInstruction
     sendMessage(userQueryParts: GenericMessagePart[]): Promise<IChatResponse | null>; 
-    sendFunctionResponse(functionResponseParts: GenericMessagePart[]): Promise<IChatResponse | null>; 
 }
 
 export interface IAiService {
@@ -48,7 +47,6 @@ export interface IAiService {
     listAvailableModels(apiKey: string): Promise<string[]>; // Added apiKey parameter
     // Updated processQuery to accept contextType
     processQuery(query: string, contextContent: string, contextType?: string): Promise<IAIResponse>; 
-    processToolExecutionResult(toolCallId: string, functionName: string, commandOutput: string): Promise<IAIResponse>; 
 }
 
 // New IAiProvider interface
