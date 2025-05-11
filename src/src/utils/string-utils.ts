@@ -3,7 +3,7 @@ import { Logger } from './logger';
 const logger = new Logger('StringUtils'); 
 
 // Set this to true when you need to debug character-by-character processing in stripAnsiCodes
-export const ENABLE_VERBOSE_STRIP_ANSI_DEBUG = false; // Default to false to reduce log noise
+export const ENABLE_VERBOSE_STRIP_ANSI_DEBUG = true; // Default to false to reduce log noise
 
 /**
  * Strips ANSI escape codes and processes backspace characters from a string.

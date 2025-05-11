@@ -119,6 +119,16 @@ AI_CODING_SESSION_NOTES.md
     *   **Goal**: Improve cleaning logic in `command-output-capturer.ts` to isolate true command output.
 *   **AI Chat UI - General Working/Loading Indicator**: Implement a visual indicator in `AiPanelComponent.tsx` (distinct from the send button's spinner) that displays while waiting for a response from the AI service (i.e., during general AI processing for the chat history).
 *   **Investigate `electron-store` Typing Issue (High Priority)**: Find a robust, type-safe solution for `electron-store` to replace the `(store as any)` workaround.
+*   **Suppress Wrapper Command Echo in Terminal (New)**:
+    *   **Challenge**: The wrapper commands (e.g., `Write-Output "START_MARKER"; actual_command; Write-Output "END_MARKER"`) used for output capturing are visible in the terminal when executed.
+    *   **Goal**: Prevent the user from seeing these wrapper commands in the terminal display, while still using them for capture.
+    *   **Plan**:
+        1.  In `TerminalIPC.ts` (`handleExecuteCommandAndCapture`): When sending a wrapped command to `PtyManager`, also flag that the echo of this specific wrapped command string needs to be suppressed from the renderer's view for this PTY.
+        2.  In `PtyManager.ts` (PTY `onData` handler):
+            *   The raw PTY data will still be used by `TerminalIPC` for output capture (finding markers).
+            *   Before forwarding data to the renderer (`terminal:data` IPC): If the "suppress echo" flag is active for the current PTY and command, buffer incoming data, identify and remove the first instance of the known wrapped command string (and its trailing newline).
+            *   Send the cleaned data to the renderer. Clear the suppression flag once done for that command.
+    *   **Affected files**: `src/main-process/ipc-handlers/terminal-ipc.ts`, `src/main-process/pty-manager.ts`.
 
 ### 5.2. Broader Pending Items (from Project Plan):
 
