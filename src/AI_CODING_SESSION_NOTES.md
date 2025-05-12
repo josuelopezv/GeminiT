@@ -142,7 +142,11 @@ AI_CODING_SESSION_NOTES.md
 ## 6. Key Learnings & Challenges (Recent & Ongoing)
 
 *   **Removing Tool Calls**: Successfully transitioned to markdown-based command suggestions. This involved careful updates to system prompts, AI service logic, and associated interfaces. Unit tests were crucial for verifying these changes.
-*   **Command Output Capturing & Cleaning**: Remains a primary technical challenge. Focus is on `stripAnsiCodes` (especially backspace handling) and improving echo/prompt removal in `command-output-capturer.ts`.
+*   **Command Output Capturing & Cleaning (MAJOR FOCUS)**: Remains a primary technical challenge. 
+    *   **Initial Issue**: Timeouts in `captureOutputForCommand` (`terminal-ipc.ts`) due to strict regex for start/end markers not accounting for ANSI codes or other characters on the same line before a newline.
+    *   **Revert of Echo Suppression**: Previous attempts to suppress wrapper command echo in `pty-manager.ts` and `terminal-ipc.ts` were reverted to simplify debugging the capture mechanism.
+    *   **Current Fix Attempt (May 10, 2025 - Evening)**: Modified `startMarkerRegex` and `endMarkerRegex` in `terminal-ipc.ts` to be more robust. `startMarkerRegex` now aims to consume the entire line the marker is on. `endMarkerRegex` is simplified to just find the marker string, with logic to take content before it. The goal is to reliably capture output even with ANSI codes and varied shell behavior.
+    *   **Next Step**: Test the latest regex changes by running the application and executing commands.
 *   **`electron-store` TypeScript Typing**: The `as any` workaround is functional but needs a proper fix for type safety.
 *   _(Previous learnings regarding UI refactoring, SDK issues, PTY execution, and React StrictMode are still relevant but have been integrated into the achievements or are considered addressed for now)._
 
@@ -173,23 +177,25 @@ This session focused on removing the AI SDK's tool-calling mechanism for command
 
 ### 7.2. Updated Pending Tasks & Focus (Consolidated)
 
-*   **Reliable Command Output Cleaning**: Top priority, focusing on `stripAnsiCodes` (backspace handling) and `command-output-capturer.ts`.
+*   **Reliable Command Output Capturing & Cleaning (TOP PRIORITY)**:
+    *   **Current Status**: Modified marker regex in `terminal-ipc.ts` (`captureOutputForCommand`).
+    *   **Next**: Test these changes thoroughly. If successful, this resolves the timeout issue.
+    *   **Future (if capture is reliable)**: Re-address suppressing the wrapper command echo from the terminal display (deferred from previous plan).
 *   **AI Chat UI - General Working/Loading Indicator**: For `AiPanelComponent.tsx`.
 *   **Investigate `electron-store` Typing Issue**: Find a type-safe solution.
 *   **Broader Items**: Full feedback loop, SSH, Tabs, Enhanced AI Context, Advanced Settings, Error Handling/Polish.
 
-### 7.3. Current Code State Summary (Reflects tool removal)
+### 7.3. Current Code State Summary (Reflects tool removal & output capture attempts)
 
-*   **Key files modified/created in this session (May 10, 2025 - Tool Removal Focus)**:
-    *   `src/main-process/app-store-manager.ts` (updated default system prompt)
-    *   `src/gemini-chat-manager.ts` (removed tool parameters, removed `sendFunctionResponse`)
-    *   `src/ai-service.ts` (removed tool logic, updated `processQuery`, removed `processToolExecutionResult`)
-    *   `src/interfaces/ai-service.interface.ts` (updated `IAiService` and `IChatManager` interfaces)
+*   **Key files modified/created in this session (May 10, 2025 - Tool Removal & Output Capture Focus)**:
+    *   `src/main-process/app-store-manager.ts` (updated default system prompt - part of tool removal)
+    *   `src/gemini-chat-manager.ts` (removed tool parameters, removed `sendFunctionResponse` - part of tool removal)
+    *   `src/ai-service.ts` (removed tool logic, updated `processQuery`, removed `processToolExecutionResult` - part of tool removal)
+    *   `src/interfaces/ai-service.interface.ts` (updated `IAiService` and `IChatManager` interfaces - part of tool removal)
     *   `src/tests/unit/ai-service.test.ts` (updated tests to reflect tool removal)
+    *   `src/main-process/pty-manager.ts` (Reverted echo suppression changes).
+    *   `src/main-process/ipc-handlers/terminal-ipc.ts` (Reverted echo suppression in `writeToPty` call. Significantly updated `captureOutputForCommand` with new marker regex and logic).
     *   `AI_CODING_SESSION_NOTES.md` (this document)
 *   **File deleted**:
-    *   `src/ai-tools.ts`
-*   **(Previous session changes from earlier on May 10, 2025, are now summarized in "Current State & Key Achievements")**
-
----
-*(Older sections like "7.4. Session Update (May 10, 2025 - Continued)" and "7.5. Strategy: Removing Tool Calls for AI Command Execution (May 10, 2025)" have been incorporated into the summary above and can be removed or archived to shorten the document if desired.)*
+    *   `src/ai-tools.ts` (part of tool removal)
+<!-- ...existing code... -->

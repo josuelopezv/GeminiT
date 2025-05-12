@@ -9,7 +9,7 @@ export interface IPtyProcess {
     pid: number;
     write: (data: string) => void;
     resize: (cols: number, rows: number) => void;
-    onData: (callback: (data: string) => void) => IDisposable;
+    onData: (callback: (data: string) => void) => IDisposable; // Reverted signature
     kill: (signal?: string) => void;
 }
 
@@ -45,7 +45,7 @@ export function spawnPtyProcess(
         });
 
         shells.set(id, ptyProcess);
-        ptyProcess.onData(onDataCallback);
+        ptyProcess.onData(onDataCallback); // Directly use the provided callback
 
         logger.info(`PTY process created with ID: ${id}, PID: ${ptyProcess.pid}, Shell: ${shellCmd}`);
         return ptyProcess;
@@ -55,11 +55,11 @@ export function spawnPtyProcess(
     }
 }
 
-export function writeToPty(id: string, data: string): boolean {
+export function writeToPty(id: string, data: string): boolean { // Removed suppressEcho parameter
     const ptyProcess = shells.get(id);
     if (ptyProcess) {
         try {
-            logger.debug(`Writing to PTY ID ${id}, Data:`, data); // New log
+            logger.debug(`Writing to PTY ID ${id}, Data:`, data); 
             ptyProcess.write(data);
             return true;
         } catch (err) {

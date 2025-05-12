@@ -37,63 +37,90 @@ async function captureOutputForCommand(
         let commandOutputFinished = false;
         let dataListenerDisposable: IDisposable | null = null;
 
-        // Regex to find the start marker, potentially with leading/trailing whitespace on its line
-        const startMarkerRegex = new RegExp(`^[\s\r\n]*${startMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\s\r\n]*`, 'm');
-        // Regex to find the end marker, potentially with leading/trailing whitespace on its line
-        const endMarkerRegex = new RegExp(`^[\s\r\n]*${endMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\s\r\n]*`, 'm');
+        // Regex to find the start marker and consume the entire line it is on.
+        // This ensures that when we strip the start marker, we strip its entire line.
+        const escapedStartMarker = startMarker.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+        const startMarkerRegex = new RegExp(`^(?:.*)${escapedStartMarker}(?:.*)\\r?\\n?`, 'm');
+
+        // Regex to find the end marker. We only care about its presence.
+        const escapedEndMarker = endMarker.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+        const endMarkerRegex = new RegExp(escapedEndMarker); // Simpler regex, just find the marker
 
         const outputListener = (data: string) => {
             if (commandOutputFinished) return;
-            logger.debug(`[${captureRunId}] Raw data chunk for capture:`, JSON.stringify(data)); // Log with JSON.stringify for clarity
-            buffer += data;
+            logger.debug(`[${captureRunId}] Raw data chunk for capture:`, JSON.stringify(data));
+            buffer += data; // Accumulate raw data
+
+            let searchableBuffer = stripAnsiCodes(buffer); // Strip ANSI codes for reliable marker searching
+            logger.debug(`[${captureRunId}] Searchable (stripped) buffer:`, JSON.stringify(searchableBuffer));
 
             if (!capturing) {
-                const match = buffer.match(startMarkerRegex);
+                const match = searchableBuffer.match(startMarkerRegex);
                 if (match) {
-                    logger.debug(`[${captureRunId}] Actual Start marker output found.`);
-                    // Content after the start marker (and its line) is the beginning of real output.
-                    buffer = buffer.substring(match.index! + match[0].length);
+                    logger.debug(`[${captureRunId}] Start marker regex match found in stripped buffer:`, JSON.stringify(match[0]));
+                    
+                    // Advance the original buffer past the matched start marker line.
+                    // Find the occurrence of the clean startMarker string in the *original* buffer
+                    // to correctly identify the position of the line to remove.
+                    const rawStartMarkerIndex = buffer.indexOf(startMarker);
+                    if (rawStartMarkerIndex !== -1) {
+                        let endOfLineInRawBuffer = rawStartMarkerIndex;
+                        // Find the next newline character after the raw start marker
+                        while (endOfLineInRawBuffer < buffer.length && buffer[endOfLineInRawBuffer] !== '\\n' && buffer[endOfLineInRawBuffer] !== '\\r') {
+                            endOfLineInRawBuffer++;
+                        }
+                        // Include the newline character(s)
+                        if (endOfLineInRawBuffer < buffer.length && buffer[endOfLineInRawBuffer] === '\\r') {
+                            endOfLineInRawBuffer++;
+                        }
+                        if (endOfLineInRawBuffer < buffer.length && buffer[endOfLineInRawBuffer] === '\\n') {
+                            endOfLineInRawBuffer++;
+                        }
+                        
+                        buffer = buffer.substring(endOfLineInRawBuffer);
+                        logger.debug(`[${captureRunId}] Advanced raw buffer after start marker line removal:`, JSON.stringify(buffer));
+                        searchableBuffer = stripAnsiCodes(buffer); // Re-strip the advanced buffer
+                        logger.debug(`[${captureRunId}] Searchable buffer post start marker processing:`, JSON.stringify(searchableBuffer));
+                    } else {
+                        // This case should ideally not happen if markers are unique and not ANSI-fied.
+                        logger.warn(`[${captureRunId}] Raw start marker string "${startMarker}" not found in buffer, though regex matched on stripped. This might lead to incorrect capture start.`);
+                        // Fallback: attempt to remove based on the stripped match length if raw marker not found.
+                        // This is less reliable.
+                        buffer = buffer.substring(match[0].length); // This was the old logic, might be problematic.
+                        searchableBuffer = stripAnsiCodes(buffer);
+                    }
+                    
                     capturing = true;
-                    logger.debug(`[${captureRunId}] Buffer after start marker processing:`, JSON.stringify(buffer));
-                    // Fall through to immediately process this remaining buffer for the end marker
+                    capturedOutput = ''; // Reset captured output once capturing starts
                 }
             }
 
             if (capturing) {
-                const match = buffer.match(endMarkerRegex);
+                const match = searchableBuffer.match(endMarkerRegex);
                 if (match) {
-                    logger.debug(`[${captureRunId}] Actual End marker output found.`);
-                    // Append content before the end marker's line.
-                    capturedOutput += buffer.substring(0, match.index!);
+                    logger.debug(`[${captureRunId}] End marker regex match found in stripped buffer at index ${match.index}.`);
+                    
+                    // The content before the end marker in the *current* searchableBuffer is what we want.
+                    // `searchableBuffer` at this point contains data accumulated since the start marker (or last check)
+                    // and has been stripped of ANSI codes.
+                    capturedOutput += searchableBuffer.substring(0, match.index!);
+                    
                     commandOutputFinished = true;
                     if (dataListenerDisposable) dataListenerDisposable.dispose();
 
-                    logger.debug(`[${captureRunId}] Captured block before strip:`, JSON.stringify(capturedOutput));
-                    let strippedOutput = stripAnsiCodes(capturedOutput);
-                    logger.debug(`[${captureRunId}] Captured block after strip:`, JSON.stringify(strippedOutput));
-                    
-                    let finalOutput = strippedOutput.trim(); // Simpler trim now
+                    let finalOutput = capturedOutput.trim(); // Trim the accumulated, stripped output.
 
-                    logger.debug(`[${captureRunId}] Final captured output:`, JSON.stringify(finalOutput));
+                    logger.debug(`[${captureRunId}] Final captured output (stripped and trimmed):`, JSON.stringify(finalOutput));
                     resolve({ output: finalOutput });
                     return;
                 } else {
-                    // If end marker not yet found, the whole current buffer (if capturing) 
-                    // or part of it (if start marker was just found) is part of the command output.
-                    // This branch is subtle: if start was found, buffer is already trimmed.
-                    // If not, we are accumulating. The next check for endMarker will handle it.
-                    // No action needed here if end marker is not found yet, just let buffer accumulate more data,
-                    // unless we just started capturing and buffer has content.
-                    // If we just turned capturing on, and buffer has content that doesn't contain the end marker,
-                    // that content is part of the output.
-                    if (capturing && buffer.length > 0) { // Process if capturing and buffer has new data
-                         // This check is to ensure we don't add old buffer content if start marker was found mid-buffer
-                         // and the remainder didn't have the end marker.
-                         // The current logic: buffer is already the part *after* the start marker.
-                         // So, if no end marker, this whole buffer is content.
-                        capturedOutput += buffer;
-                        buffer = '';
-                    }
+                    // No end marker yet in the current searchableBuffer.
+                    // The entire current searchableBuffer is part of the ongoing command output.
+                    capturedOutput += searchableBuffer;
+                    // We need to clear the main buffer so these parts are not processed again,
+                    // and searchableBuffer will be re-calculated from new data in the next call.
+                    buffer = ''; 
+                    logger.debug(`[${captureRunId}] End marker not found. Accumulated stripped output so far:`, JSON.stringify(capturedOutput));
                 }
             }
         };
@@ -108,6 +135,7 @@ async function captureOutputForCommand(
         }
         
         // Send the combined command with start and end markers
+        // Reverted: Removed suppressEcho flag from writeToPty call
         writeToPty(terminalId, commandToExecuteWithMarkers + '\r');
 
         // Timeout for the whole operation
