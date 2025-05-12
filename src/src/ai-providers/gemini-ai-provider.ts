@@ -1,7 +1,7 @@
 // filepath: c:\Users\Admin\source\repos\GeminiT\src\src\ai-providers\gemini-ai-provider.ts
 import { net } from 'electron';
 import { IAiProvider, IChatManager } from '../interfaces/ai-service.interface';
-import { GeminiChatSessionManager } from '../gemini-chat-manager';
+import { GeminiChatManager } from '../services/chat/gemini-chat-manager';
 import { Logger } from '../utils/logger';
 
 const logger = new Logger('GeminiAiProvider');
@@ -68,7 +68,7 @@ export class GeminiAiProvider implements IAiProvider {
     }
 
     public createChatManager(apiKey: string, modelName: string, initialModelInstruction: string): IChatManager {
-        logger.info(`Creating GeminiChatSessionManager for model: ${modelName}`);
-        return new GeminiChatSessionManager(apiKey, modelName, initialModelInstruction);
+        logger.info(`Creating GeminiChatManager for model: ${modelName}`);
+        return new GeminiChatManager(apiKey, modelName, initialModelInstruction);
     }
 }

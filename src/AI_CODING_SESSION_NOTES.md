@@ -41,9 +41,12 @@ To create a cross-platform desktop terminal application using Electron that allo
 ### 3.3. Current Project Structure (Simplified)
 
 ```
-src/
-├── main.ts                    # Main process orchestrator
-├── renderer.tsx               # Renderer process entry point (React root render)
+├── ai-service.ts          # Legacy file to be removed
+├── gemini-chat-manager.ts # Legacy file to be removed
+├── google-ai-utils.ts     # Utilities for Gemini API
+├── main.ts               # Main process orchestrator
+├── renderer.ts          # Legacy file to be removed
+├── renderer.tsx         # Renderer process entry point (React root render)
 ├── ai-providers/
 │   └── gemini-ai-provider.ts  # Gemini-specific AI provider implementation
 ├── interfaces/
@@ -70,6 +73,7 @@ src/
 │   │   │   ├── ApiKeyInput.tsx
 │   │   │   ├── InitialInstructionInput.tsx
 │   │   │   └── ModelSelector.tsx
+│   │   ├── terminal/        # Terminal-related components
 │   │   ├── AiPanelComponent.tsx
 │   │   ├── App.tsx          # Root React component
 │   │   ├── SettingsPanelComponent.tsx
@@ -79,9 +83,11 @@ src/
 │   │   │   └── useChatLogic.ts
 │   │   ├── settings/
 │   │   │   └── useSettingsLogic.ts
-│   │   └── terminal/
+│   │   └── terminal/        # Terminal-related hooks
 │   ├── stores/             # State management stores
-│   └── types/              # TypeScript type definitions
+│   ├── types/              # TypeScript type definitions
+│   └── utils/
+│       └── terminal/       # Terminal-specific utilities
 ├── services/
 │   ├── ai-service.ts       # Core AI service
 │   └── chat/               # Chat-related services
@@ -99,12 +105,15 @@ src/
 │   └── tailwind.css       # Tailwind CSS directives
 └── tests/                 # Test files
     ├── jest.setup.js      # Jest configuration
-    ├── jest.setup.ts
+    ├── jest.setup.ts      # TypeScript Jest setup
     ├── e2e/              # End-to-end tests
-    │   └── app.spec.ts
+    │   ├── app.spec.ts
+    │   └── initial-model-instruction.spec.ts
     ├── test-utils/       # Test utilities
+    │   ├── store-helper.e2e.ts
     │   └── store-helper.ts
     └── unit/            # Unit tests
+        ├── ai-service.test.ts
         ├── renderer-process/
         │   ├── components/
         │   │   ├── ChatInput.test.tsx
@@ -133,7 +142,7 @@ src/
 *   **Build System Updated**: Webpack and TypeScript configurations support React (JSX, TSX) and Tailwind CSS.
 *   **AI Service Abstraction**: `IAiService` and `IChatManager` interfaces are in place.
 *   **Centralized Logger**: `Logger` utility in `src/utils/logger.ts` used in the main process.
-*   **Command Output Capturer**: Refactored into `src/main-process/command-output-capturer.ts`.
+*   **Command Output Handling**: Integrated into `terminal-ipc.ts` for streamlined output capture and processing.
 *   **Text-Based Command Execution**: Users can execute commands parsed from AI's markdown responses.
 *   **DaisyUI Integration & UI Enhancements (Previous Session)**:
     *   `SettingsPanelComponent.tsx`: Modal refactored to use `<dialog>`.
@@ -151,8 +160,8 @@ src/
 
 *   **Reliable Command Output Cleaning (Ongoing)**:
     *   **Challenge**: Output from AI-executed commands can still be "messy" (shell prompts, echoed commands).
-    *   **Specific Issue**: Backspace (`\b`) character handling in `stripAnsiCodes` (`src/utils/string-utils.ts`) needs verification and potential fixes to prevent malformed strings that break echo removal in `command-output-capturer.ts`.
-    *   **Goal**: Improve cleaning logic in `command-output-capturer.ts` to isolate true command output.
+    *   **Specific Issue**: Backspace (`\b`) character handling in `stripAnsiCodes` (`src/utils/string-utils.ts`) needs verification and potential fixes to prevent malformed strings that break echo removal in `terminal-ipc.ts`.
+    *   **Goal**: Improve cleaning logic in `terminal-ipc.ts` to isolate true command output.
 *   **AI Chat UI - General Working/Loading Indicator**: Implement a visual indicator in `AiPanelComponent.tsx` (distinct from the send button's spinner) that displays while waiting for a response from the AI service (i.e., during general AI processing for the chat history).
 *   **Investigate `electron-store` Typing Issue (High Priority)**: Find a robust, type-safe solution for `electron-store` to replace the `(store as any)` workaround.
 *   **Suppress Wrapper Command Echo in Terminal (New)**:
@@ -221,18 +230,24 @@ This session focused on removing the AI SDK's tool-calling mechanism for command
 *   **Investigate `electron-store` Typing Issue**: Find a type-safe solution.
 *   **Broader Items**: Full feedback loop, SSH, Tabs, Enhanced AI Context, Advanced Settings, Error Handling/Polish.
 
-### 7.3. Current Code State Summary (Reflects tool removal & output capture attempts)
+### 7.3. Current Code State Summary (Reflects service refactoring & cleanup)
 
-*   **Key files modified/created in this session (May 10, 2025 - Tool Removal & Output Capture Focus)**:
-    *   `src/main-process/app-store-manager.ts` (updated default system prompt - part of tool removal)
-    *   `src/gemini-chat-manager.ts` (removed tool parameters, removed `sendFunctionResponse` - part of tool removal)
-    *   `src/ai-service.ts` (removed tool logic, updated `processQuery`, removed `processToolExecutionResult` - part of tool removal)
-    *   `src/interfaces/ai-service.interface.ts` (updated `IAiService` and `IChatManager` interfaces - part of tool removal)
-    *   `src/tests/unit/ai-service.test.ts` (updated tests to reflect tool removal)
-    *   `src/main-process/pty-manager.ts` (Reverted echo suppression changes).
-    *   `src/main-process/ipc-handlers/terminal-ipc.ts` (Reverted echo suppression in `writeToPty` call. Significantly updated `captureOutputForCommand` with new marker regex and logic).
+*   **Legacy Files to Remove**:
+    *   `src/ai-service.ts` (functionality moved to services/ai-service.ts)
+    *   `src/gemini-chat-manager.ts` (functionality moved to services/chat/gemini-chat-manager.ts)
+    *   `src/renderer.ts` (replaced by renderer.tsx)
+
+*   **Key files modified/created in this session**:
+    *   `src/main-process/app-store-manager.ts` (updated default system prompt)
+    *   `src/main-process/ipc-handlers/terminal-ipc.ts` (improved output capture logic)
+    *   `src/services/ai-service.ts` (new location for core AI service)
+    *   `src/services/chat/gemini-chat-manager.ts` (new location for chat management)
+    *   `src/renderer-process/components/chat/*` (new React components for chat UI)
+    *   `src/renderer-process/components/settings/*` (new React components for settings)
+    *   `src/renderer-process/hooks/*` (new React hooks for logic separation)
     *   `AI_CODING_SESSION_NOTES.md` (this document)
-*   **File deleted**:
+
+*   **Previously Deleted**:
     *   `src/ai-tools.ts` (part of tool removal)
 
 ## 8. Session Update (May 12, 2025 - Development Tools Enhancement)
@@ -289,3 +304,14 @@ The application now supports a more robust development workflow:
     * General UI polish and error handling improvements
 
 The development environment is now better equipped for debugging and development work, with proper tooling and environment-specific configurations in place.
+
+### 8.5. File Cleanup Completed
+
+Legacy files have been removed as their functionality was moved to new locations:
+
+* **Removed Files**:
+    * ✓ `src/ai-service.ts` → functionality in `src/services/ai-service.ts`
+    * ✓ `src/gemini-chat-manager.ts` → functionality in `src/services/chat/gemini-chat-manager.ts`
+    * ✓ `src/renderer.ts` → replaced by `src/renderer.tsx`
+
+All legacy files have been cleaned up, with their functionality properly migrated to the new modular structure.

@@ -2,6 +2,9 @@ const path = require('path');
 
 module.exports = {
     mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+    optimization: {
+        minimize: process.env.NODE_ENV === 'production',
+    },
     entry: './src/renderer.tsx', // Changed to .tsx
     target: 'electron-renderer',
     output: {

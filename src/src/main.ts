@@ -3,8 +3,8 @@ import { app } from 'electron';
 // import Store, { Schema as ElectronStoreSchema } from 'electron-store';
 // import { AppStoreSchemaContents } from './interfaces/store-schema.interface'; 
 import appStoreManager from './main-process/app-store-manager'; // Import the new AppStoreManager
-import { AIService } from './ai-service';
-import { GeminiAiProvider } from './ai-providers/gemini-ai-provider'; // Added import
+import { AIService } from './services/ai-service';
+import { GeminiAiProvider } from './ai-providers/gemini-ai-provider';// Added import
 import { createMainWindow } from './main-process/window-manager';
 import { initializeAppLifecycle } from './main-process/app-lifecycle';
 import { initializeTerminalIpc } from './main-process/ipc-handlers/terminal-ipc';

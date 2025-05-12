@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
 import { Logger } from '../utils/logger'; 
 
@@ -12,21 +12,48 @@ export function createMainWindow(onClosed: () => void): BrowserWindow {
             width: 1200,
             height: 800,
             webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-            }
+                nodeIntegration: true, // Required for direct access to Node.js APIs
+                contextIsolation: false, // Required for IPC communication pattern
+                webSecurity: true,
+                allowRunningInsecureContent: false,
+                sandbox: false, // Can't use sandbox with nodeIntegration
+                additionalArguments: ['--disable-site-isolation-trials'], // Required for terminal functionality
+            },
+            // Additional security settings
+            autoHideMenuBar: true, // Hide menu bar by default
+            show: false, // Don't show until ready-to-show
+            backgroundColor: '#1a1a1a', // Prevent white flash during load
         });
 
         const htmlPath = path.join(__dirname, '../../index.html'); 
         logger.info('Loading HTML from:', htmlPath);
         mainWindow.loadURL(`file://${htmlPath}`);
-        mainWindow.webContents.openDevTools();
+
+        // Only open DevTools in development mode
+        if (!app.isPackaged) {
+            mainWindow.webContents.openDevTools();
+        }
+
+        // Show window when ready
+        mainWindow.once('ready-to-show', () => {
+            mainWindow?.show();
+        });
 
         mainWindow.on('closed', () => {
             logger.info('Main window closed.');
             mainWindow = null;
             onClosed();
         });
+
+        // Set up additional security handlers
+        mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+            // Prevent opening any external URLs
+            if (url.startsWith('file:') || url.startsWith('data:')) {
+                return { action: 'allow' };
+            }
+            return { action: 'deny' };
+        });
+
         logger.info('Main window created successfully.');
         return mainWindow;
     } catch (err) {
