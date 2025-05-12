@@ -12,8 +12,20 @@ import { initializeAiIpc } from './main-process/ipc-handlers/ai-ipc';
 import { initializeSettingsIpc } from './main-process/ipc-handlers/settings-ipc';
 import { cleanupPtyProcesses } from './main-process/pty-manager';
 import { Logger } from './utils/logger'; // Import Logger
+import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 
 const mainLogger = new Logger('MainApp'); // Create a logger instance for main.ts
+
+const installDevTools = async () => {
+    if (!app.isPackaged) {
+        try {
+            const name = await installExtension(REACT_DEVELOPER_TOOLS);
+            mainLogger.info(`Added Extension: ${name}`);
+        } catch (err) {
+            mainLogger.error('An error occurred installing React DevTools:', err);
+        }
+    }
+};
 
 // Schema definition is now inside AppStoreManager
 // const schema: ElectronStoreSchema<AppStoreSchemaContents> = { ... };
@@ -38,8 +50,11 @@ initializeTerminalIpc();
 initializeAiIpc(aiService, appStoreManager); // Updated to pass appStoreManager
 initializeSettingsIpc(appStoreManager, aiService); // Updated to pass appStoreManager
 
-// Initialize App Lifecycle
-initializeAppLifecycle(() => createMainWindow(cleanupPtyProcesses));
+// Initialize App Lifecycle with DevTools Installation
+app.whenReady().then(async () => {
+    await installDevTools();
+    createMainWindow(cleanupPtyProcesses);
+});
 
 // Graceful shutdown
 app.on('before-quit', () => {

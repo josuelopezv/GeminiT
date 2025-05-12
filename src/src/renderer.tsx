@@ -17,11 +17,13 @@ if (rootElement) {
         <React.StrictMode>
             <App />
         </React.StrictMode>
-    );
-
-    document.addEventListener('DOMContentLoaded', () => {
-        console.warn('Legacy initializers are being called. This should be empty once all UI is React components.');
-    });
+    );    // In development mode, check for legacy initializers
+    if (process.env.NODE_ENV === 'development') {
+        const legacyScripts = document.querySelectorAll('script:not([src*="renderer.js"])');
+        if (legacyScripts.length > 0) {
+            console.warn('Found non-React scripts. All UI should be React components.');
+        }
+    }
 } else {
     console.error('Failed to find the root element. React app will not be mounted.');
 }

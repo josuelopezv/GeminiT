@@ -42,45 +42,81 @@ To create a cross-platform desktop terminal application using Electron that allo
 
 ```
 src/
-├── main.ts                 # Main process orchestrator
-├── ai-service.ts           # Core AI business logic
-├── gemini-chat-manager.ts # Manages Gemini ChatSession and API calls
-├── google-ai-utils.ts      # Utilities for Gemini (model listing, fallbacks)
-├── renderer.tsx            # Renderer process entry point (React root render)
+├── main.ts                    # Main process orchestrator
+├── renderer.tsx               # Renderer process entry point (React root render)
+├── ai-providers/
+│   └── gemini-ai-provider.ts  # Gemini-specific AI provider implementation
 ├── interfaces/
-│   └── ai-service.interface.ts # Defines IAiService, IChatManager etc.
+│   ├── ai-service.interface.ts # Defines IAiService, IChatManager etc.
 │   └── store-schema.interface.ts # Defines schema for electron-store
 ├── main-process/
-│   ├── app-lifecycle.ts
-│   ├── app-store-manager.ts    # Manages electron-store
-│   ├── command-output-capturer.ts # Logic for capturing PTY command output
-│   ├── pty-manager.ts
-│   ├── window-manager.ts
+│   ├── app-lifecycle.ts      # App lifecycle management
+│   ├── app-store-manager.ts  # Manages electron-store
+│   ├── pty-manager.ts        # PTY process management
+│   ├── window-manager.ts     # Electron window management
 │   └── ipc-handlers/
-│       ├── ai-ipc.ts
-│       ├── settings-ipc.ts
-│       └── terminal-ipc.ts
+│       ├── ai-ipc.ts         # AI-related IPC handlers
+│       ├── settings-ipc.ts   # Settings-related IPC handlers
+│       └── terminal-ipc.ts   # Terminal-related IPC handlers
 ├── renderer-process/
 │   ├── command-parser.ts     # Parses commands from AI text responses
-│   └── components/
-│       ├── AiPanelComponent.tsx
-│       ├── App.tsx             # Root React component
-│       ├── SettingsPanelComponent.tsx
-│       └── TerminalComponent.tsx
-├── styles/
-│   ├── main.css              # Legacy global styles (potentially to be merged/removed)
-│   └── tailwind.css          # Tailwind CSS directives
+│   ├── components/
+│   │   ├── chat/            # Chat-related components
+│   │   │   ├── ChatHistory.tsx
+│   │   │   ├── ChatInput.tsx
+│   │   │   ├── ChatMessage.tsx
+│   │   │   └── SuggestedCommand.tsx
+│   │   ├── settings/        # Settings-related components
+│   │   │   ├── ApiKeyInput.tsx
+│   │   │   ├── InitialInstructionInput.tsx
+│   │   │   └── ModelSelector.tsx
+│   │   ├── AiPanelComponent.tsx
+│   │   ├── App.tsx          # Root React component
+│   │   ├── SettingsPanelComponent.tsx
+│   │   └── TerminalComponent.tsx
+│   ├── hooks/               # React hooks
+│   │   ├── chat/
+│   │   │   └── useChatLogic.ts
+│   │   ├── settings/
+│   │   │   └── useSettingsLogic.ts
+│   │   └── terminal/
+│   ├── stores/             # State management stores
+│   └── types/              # TypeScript type definitions
+├── services/
+│   ├── ai-service.ts       # Core AI service
+│   └── chat/               # Chat-related services
+│       ├── ai-config-manager.ts
+│       ├── base-chat-manager.ts
+│       ├── chat-history-manager.ts
+│       ├── chat-response-processor.ts
+│       ├── gemini-chat-manager.ts
+│       └── message-mapper.ts
 ├── utils/
-│   ├── logger.ts             # Main process logger utility
-│   └── string-utils.ts       # Shared string utilities (e.g., stripAnsiCodes)
-index.html                  # Basic HTML shell for React app
-package.json
-postcss.config.js
-tailwind.config.js
-tsconfig.json             # For renderer process (React, JSX)
-tsconfig.main.json        # For main process
-webpack.config.js
-AI_CODING_SESSION_NOTES.md
+│   ├── logger.ts           # Main process logger utility
+│   └── string-utils.ts     # Shared string utilities (e.g., stripAnsiCodes)
+├── styles/
+│   ├── main.css           # Legacy global styles
+│   └── tailwind.css       # Tailwind CSS directives
+└── tests/                 # Test files
+    ├── jest.setup.js      # Jest configuration
+    ├── jest.setup.ts
+    ├── e2e/              # End-to-end tests
+    │   └── app.spec.ts
+    ├── test-utils/       # Test utilities
+    │   └── store-helper.ts
+    └── unit/            # Unit tests
+        ├── renderer-process/
+        │   ├── components/
+        │   │   ├── ChatInput.test.tsx
+        │   │   └── ChatMessage.test.tsx
+        │   └── hooks/
+        │       ├── useChatLogic.test.ts
+        │       └── useSettingsLogic.test.ts
+        └── services/
+            └── chat/
+                ├── ai-config-manager.test.ts
+                ├── chat-history-manager.test.ts
+                └── message-mapper.test.ts
 ```
 **Note for AI Agent:** I will now execute commands directly in the foreground when asked, instead of providing instructions or running them in the background, unless explicitly told otherwise for a specific command.
 
@@ -198,4 +234,58 @@ This session focused on removing the AI SDK's tool-calling mechanism for command
     *   `AI_CODING_SESSION_NOTES.md` (this document)
 *   **File deleted**:
     *   `src/ai-tools.ts` (part of tool removal)
-<!-- ...existing code... -->
+
+## 8. Session Update (May 12, 2025 - Development Tools Enhancement)
+
+This session focused on improving the development environment and tooling setup.
+
+### 8.1. Achievements & Changes
+
+* **React DevTools Integration**:
+    * Installed and properly configured `electron-devtools-installer` package
+    * Modified main process to automatically install React DevTools in development mode
+    * Confirmed proper loading and functioning of React DevTools
+* **Content Security Policy (CSP) Updates**:
+    * Updated CSP in `index.html` to properly support:
+        * React DevTools functionality
+        * WebSocket connections
+        * Blob URLs for debugging
+        * Unsafe inline scripts (required for development)
+        * Local resource access
+* **Development Environment Improvements**:
+    * Enhanced webpack configuration to respect NODE_ENV
+    * Added proper development/production mode scripts in package.json
+    * Updated build system to properly handle environment-specific settings
+    * Improved error logging and development experience
+
+### 8.2. Code Changes
+
+* **Modified Files**:
+    * `main.ts`: Added React DevTools installation
+    * `index.html`: Updated Content Security Policy
+    * `webpack.config.js`: Enhanced environment handling
+    * `package.json`: Added new development scripts
+    
+### 8.3. Updated Development Workflow
+
+The application now supports a more robust development workflow:
+
+* **Development Mode** (`npm run dev`):
+    * React DevTools automatically installed
+    * Source maps enabled
+    * Full development environment features
+    * Hot reloading support
+* **Production Mode** (`npm run build:prod`):
+    * Optimized builds
+    * Stricter CSP
+    * No development tools included
+
+### 8.4. Current Focus
+
+* **Ongoing Development Tasks** (Updated):
+    * Continue with command output capturing improvements
+    * Address electron-store typing issues
+    * Implement AI Chat UI loading indicators
+    * General UI polish and error handling improvements
+
+The development environment is now better equipped for debugging and development work, with proper tooling and environment-specific configurations in place.

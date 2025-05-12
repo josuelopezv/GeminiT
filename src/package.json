@@ -1,12 +1,12 @@
 {
   "name": "ai-augmented-terminal",
   "version": "1.0.0",
-  "main": "dist/main.js",
-  "scripts": {
-    "start": "npm run build && electron .",
+  "main": "dist/main.js",  "scripts": {
+    "start": "cross-env NODE_ENV=production npm run build && electron .",
     "build": "tsc -p tsconfig.main.json && webpack",
-    "watch": "webpack --watch",
-    "dev": "npm run build && electron .",
+    "build:prod": "cross-env NODE_ENV=production tsc -p tsconfig.main.json && cross-env NODE_ENV=production webpack",
+    "watch": "cross-env NODE_ENV=development webpack --watch",
+    "dev": "cross-env NODE_ENV=development npm run build && electron .",
     "test": "npm run test:unit",
     "test:unit": "jest tests/unit",
     "test:e2e": "npm run build && cross-env E2E_TEST=true npx playwright test tests/e2e",
@@ -29,6 +29,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.45.3",
+    "@testing-library/jest-dom": "^6.1.3",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.5.1",
     "@types/electron": "^1.4.38",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.15.17",
@@ -40,6 +43,7 @@
     "daisyui": "^5.0.35",
     "electron": "^36.2.0",
     "electron-builder": "^26.0.12",
+    "electron-devtools-installer": "^4.0.0",
     "jest": "^29.7.0",
     "playwright": "^1.45.3",
     "postcss": "^8.4.40",
