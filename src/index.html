@@ -1,23 +1,48 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="night">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-Augmented Terminal (React)</title>    <script>
-        // Dynamically set CSP based on environment        const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+    <title>AI-Augmented Terminal (React)</title>
+    <script>
+        // Get environment from electron process
+        const isDev = window.process && window.process.type === 'renderer' &&
+            (!window.process.env.NODE_ENV || window.process.env.NODE_ENV === 'development');
         const csp = isDev
-            ? "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ws://localhost:* http://localhost:* https:; worker-src 'self' blob:; frame-src 'self'; base-uri 'self'; form-action 'self';"
-            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' https:; worker-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;";
-        
+            ? `default-src 'self';
+               script-src 'self' 'unsafe-eval' 'unsafe-inline';
+               style-src 'self' 'unsafe-inline';
+               font-src 'self' data:;
+               img-src 'self' data: blob:;
+               connect-src 'self' ws://localhost:* http://localhost:* https:;
+               worker-src 'self' blob:;
+               frame-src 'self';
+               base-uri 'self';
+               form-action 'self';`.replace(/\s+/g, ' ')
+            : `default-src 'self';
+               script-src 'self' 'strict-dynamic' 'nonce-${Buffer.from(Date.now().toString()).toString('base64')}';
+               style-src 'self' 'unsafe-inline';
+               font-src 'self' data:;
+               img-src 'self' data:;
+               connect-src 'self' https:;
+               worker-src 'self';
+               frame-src 'self';
+               base-uri 'self';
+               form-action 'self';
+               upgrade-insecure-requests;`.replace(/\s+/g, ' ');
+
         const meta = document.createElement('meta');
         meta.setAttribute('http-equiv', 'Content-Security-Policy');
         meta.setAttribute('content', csp);
         document.head.appendChild(meta);
     </script>
 </head>
+
 <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root" class="w-full"></div>
-    <script src="./dist/renderer.js" defer></script> 
+    <script src="./dist/renderer.js" defer></script>
 </body>
+
 </html>

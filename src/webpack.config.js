@@ -4,14 +4,20 @@ module.exports = {
     mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
     optimization: {
         minimize: process.env.NODE_ENV === 'production',
+        splitChunks: {
+            chunks: 'all',
+            filename: 'chunks/[name].[contenthash].js'
+        },
     },
     entry: './src/renderer.tsx', // Changed to .tsx
     target: 'electron-renderer',
     output: {
-        filename: 'renderer.js',
+        filename: '[name].js',
+        chunkFilename: 'chunks/[name].[contenthash].js',
         path: path.resolve(__dirname, 'dist'),
         publicPath: './dist/', // Corrected publicPath for Electron file:// protocol
-        assetModuleFilename: 'assets/[hash][ext][query]' // Define output for asset modules
+        assetModuleFilename: 'assets/[hash][ext][query]', // Define output for asset modules
+        clean: true // Clean the output directory before emit
     },
     module: {
         rules: [
@@ -45,9 +51,15 @@ module.exports = {
                 type: 'asset/resource',
             },
         ]
+    }, resolve: {
+        extensions: ['.tsx', '.ts', '.js', '.jsx'], // Added .tsx and .jsx
+        fallback: {
+            path: false,
+            crypto: false
+        }
     },
-    resolve: {
-        extensions: ['.tsx', '.ts', '.js', '.jsx'] // Added .tsx and .jsx
-    },
-    devtool: 'source-map'
+    devtool: process.env.NODE_ENV === 'production' ? 'source-map' : 'eval-source-map',
+    performance: {
+        hints: false // Disable size warnings for large development bundles
+    }
 };

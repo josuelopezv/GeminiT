@@ -1,8 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
-import { Logger } from '../utils/logger'; 
+import { Logger } from '../utils/logger';
 
-const logger = new Logger('WindowManager'); 
+const logger = new Logger('WindowManager');
 
 export let mainWindow: BrowserWindow | null = null;
 
@@ -18,6 +18,10 @@ export function createMainWindow(onClosed: () => void): BrowserWindow {
                 allowRunningInsecureContent: false,
                 sandbox: false, // Can't use sandbox with nodeIntegration
                 additionalArguments: ['--disable-site-isolation-trials'], // Required for terminal functionality
+                devTools: !app.isPackaged, // Only enable DevTools in development
+                enableWebSQL: false,
+                spellcheck: false,
+                v8CacheOptions: 'code'
             },
             // Additional security settings
             autoHideMenuBar: true, // Hide menu bar by default
@@ -25,9 +29,9 @@ export function createMainWindow(onClosed: () => void): BrowserWindow {
             backgroundColor: '#1a1a1a', // Prevent white flash during load
         });
 
-        const htmlPath = path.join(__dirname, '../../index.html'); 
+        const htmlPath = path.join(__dirname, '../index.html');
         logger.info('Loading HTML from:', htmlPath);
-        mainWindow.loadURL(`file://${htmlPath}`);
+        mainWindow.loadFile(htmlPath);
 
         // Only open DevTools in development mode
         if (!app.isPackaged) {
@@ -39,19 +43,25 @@ export function createMainWindow(onClosed: () => void): BrowserWindow {
             mainWindow?.show();
         });
 
-        mainWindow.on('closed', () => {
-            logger.info('Main window closed.');
-            mainWindow = null;
-            onClosed();
-        });
-
-        // Set up additional security handlers
+        // Security handlers
         mainWindow.webContents.setWindowOpenHandler(({ url }) => {
             // Prevent opening any external URLs
             if (url.startsWith('file:') || url.startsWith('data:')) {
                 return { action: 'allow' };
             }
             return { action: 'deny' };
+        });
+
+        // Session security
+        mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+            const allowedPermissions = new Set(['clipboard-read', 'clipboard-write']);
+            callback(allowedPermissions.has(permission));
+        });
+
+        mainWindow.on('closed', () => {
+            logger.info('Main window closed.');
+            mainWindow = null;
+            onClosed();
         });
 
         logger.info('Main window created successfully.');

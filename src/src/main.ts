@@ -71,6 +71,7 @@ app.on('before-quit', () => {
 
 // Graceful shutdown for uncaught exceptions or signals (optional but good practice)
 process.on('uncaughtException', (error) => {
+    mainLogger.error('Uncaught exception:', error);
     cleanupPtyProcesses();
     app.quit(); // Force quit on unhandled exception
 });
