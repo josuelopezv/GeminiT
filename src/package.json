@@ -30,7 +30,8 @@
     "node-pty": "github:microsoft/node-pty",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "remixicon": "^4.2.0"
+    "remixicon": "^4.2.0",
+    "strip-ansi": "^7.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.3",
