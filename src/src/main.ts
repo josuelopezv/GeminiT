@@ -85,3 +85,7 @@ process.on('SIGTERM', () => {
     cleanupPtyProcesses();
     app.quit();
 });
+
+app.on('quit', () => {
+    process.exit(0);
+});

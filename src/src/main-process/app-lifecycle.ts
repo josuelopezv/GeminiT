@@ -13,10 +13,9 @@ export function initializeAppLifecycle(createWindowCallback: () => BrowserWindow
     app.on('window-all-closed', () => {
         logger.info('All windows closed.');
         cleanupPtyProcesses();
-        if (process.platform !== 'darwin') {
-            logger.info('Quitting app (not macOS).');
-            app.quit();
-        }
+        logger.info('Quitting app...');
+        // Force quit to ensure all processes are terminated
+        app.exit(0);
     });
 
     app.on('activate', () => {

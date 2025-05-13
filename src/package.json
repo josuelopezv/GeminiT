@@ -11,7 +11,7 @@
     "watch": "concurrently \"npm run watch:main\" \"npm run watch:renderer\"",
     "watch:main": "webpack --config webpack.main.config.js --watch",
     "watch:renderer": "webpack --config webpack.renderer.config.js --watch",
-    "dev": "cross-env NODE_ENV=development concurrently \"npm run watch\" \"electron .\"",
+    "dev": "cross-env NODE_ENV=development concurrently --kill-others \"npm run watch\" \"electron .\"",
     "test": "npm run test:unit",
     "test:unit": "jest tests/unit",
     "test:e2e": "npm run build && cross-env E2E_TEST=true npx playwright test tests/e2e",
