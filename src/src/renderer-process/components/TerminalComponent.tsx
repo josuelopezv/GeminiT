@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react'; // Added useCallback
-import { ipcRenderer } from 'electron';
+import { ipcRenderer, Menu, MenuItemConstructorOptions } from 'electron';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -69,6 +69,83 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
       }
     }, [logger]);
 
+    const handleContextMenu = useCallback((event: React.MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation(); // Prevent event bubbling
+        logger.debug('Context menu event triggered', {
+            target: event.target,
+            currentTarget: event.currentTarget,
+            clientX: event.clientX,
+            clientY: event.clientY
+        });
+        
+        if (!xtermInstanceRef.current) {
+            logger.warn('xterm instance is null when handling context menu');
+            return;
+        }
+
+        const hasSelection = xtermInstanceRef.current.hasSelection();
+        const selectedText = hasSelection ? xtermInstanceRef.current.getSelection() : '';
+        
+        logger.debug('Selection state:', { 
+            hasSelection, 
+            selectedTextLength: selectedText.length,
+            selectedText: selectedText // Log the actual text for debugging
+        });
+
+        // Send only primitive values
+        const menuData = {
+            hasSelection: Boolean(hasSelection),
+            selectedText: String(selectedText),
+            terminalId: String(terminalId)
+        };
+        
+        logger.debug('Sending context menu data:', menuData);
+        ipcRenderer.send('show-context-menu', menuData);
+    }, [terminalId, logger]);
+
+    // Add handlers for menu actions
+    useEffect(() => {
+        const handleCopy = () => {
+            logger.debug('Copy action triggered');
+            if (xtermInstanceRef.current?.hasSelection()) {
+                const selectedText = xtermInstanceRef.current.getSelection();
+                logger.debug('Sending text to clipboard:', selectedText);
+                ipcRenderer.send('clipboard:write', String(selectedText));
+            }
+        };
+
+        const handlePaste = async () => {
+            logger.debug('Paste action triggered');
+            const clipboardText = await ipcRenderer.invoke('clipboard:read');
+            if (clipboardText && xtermInstanceRef.current) {
+                logger.debug('Pasting text:', clipboardText);
+                ipcRenderer.send('terminal:input', { 
+                    id: String(terminalId), 
+                    data: String(clipboardText) 
+                });
+            }
+        };
+
+        const handleClear = () => {
+            logger.debug('Clear action triggered');
+            if (xtermInstanceRef.current) {
+                xtermInstanceRef.current.clear();
+            }
+        };
+
+        // Listen for menu action events
+        ipcRenderer.on('context-menu:copy', handleCopy);
+        ipcRenderer.on('context-menu:paste', handlePaste);
+        ipcRenderer.on('context-menu:clear', handleClear);
+
+        return () => {
+            ipcRenderer.removeListener('context-menu:copy', handleCopy);
+            ipcRenderer.removeListener('context-menu:paste', handlePaste);
+            ipcRenderer.removeListener('context-menu:clear', handleClear);
+        };
+    }, [terminalId, logger]);
+
     useEffect(() => {
         if (!terminalRef.current) {
             logger.warn('Terminal ref is null at the start of useEffect.');
@@ -84,9 +161,9 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
         let resizeTimeoutId: NodeJS.Timeout | undefined;
         let themeObserver: MutationObserver | undefined;
         let terminalResizeObserver: ResizeObserver | null = null;
+        let terminalElement: HTMLDivElement | null = null;
 
         // Define performFit and debouncedResizeHandler here so they are accessible for cleanup
-        // and can be defined before being used in requestAnimationFrame.
         const performFit = () => {
             if (fitAddonRef.current && xtermInstanceRef.current && terminalRef.current && terminalRef.current.offsetParent !== null) {
                 try {
@@ -110,17 +187,90 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             resizeTimeoutId = setTimeout(performFit, 100);
         };
 
+        // Add right-click handler
+        const handleRightClick = (e: MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            logger.debug('Right-click event received', {
+                target: e.target,
+                currentTarget: e.currentTarget,
+                clientX: e.clientX,
+                clientY: e.clientY
+            });
+
+            if (!xtermInstanceRef.current) {
+                logger.warn('xterm instance is null during right-click');
+                return;
+            }
+
+            const hasSelection = xtermInstanceRef.current.hasSelection();
+            const selectedText = hasSelection ? xtermInstanceRef.current.getSelection() : '';
+            
+            logger.debug('Selection state:', { 
+                hasSelection, 
+                selectedTextLength: selectedText.length,
+                selectedText 
+            });
+
+            const menuTemplate: MenuItemConstructorOptions[] = [
+                {
+                    label: 'Copy',
+                    enabled: hasSelection,
+                    click: () => {
+                        logger.debug('Copy clicked');
+                        if (hasSelection) {
+                            navigator.clipboard.writeText(selectedText)
+                                .then(() => logger.debug('Text copied to clipboard'))
+                                .catch(err => logger.error('Failed to copy text:', err));
+                        }
+                    }
+                },
+                {
+                    label: 'Paste',
+                    click: async () => {
+                        logger.debug('Paste clicked');
+                        try {
+                            const text = await navigator.clipboard.readText();
+                            if (text) {
+                                ipcRenderer.send('terminal:input', { id: terminalId, data: text });
+                            }
+                        } catch (err) {
+                            logger.error('Failed to paste text:', err);
+                        }
+                    }
+                },
+                { type: 'separator' as const },
+                {
+                    label: 'Clear Terminal',
+                    click: () => {
+                        logger.debug('Clear clicked');
+                        xtermInstanceRef.current?.clear();
+                    }
+                }
+            ];
+
+            logger.debug('Creating context menu');
+            const menu = Menu.buildFromTemplate(menuTemplate);
+            
+            // Get the current mouse position
+            const { x, y } = { x: e.clientX, y: e.clientY };
+            logger.debug('Showing menu at position:', { x, y });
+            
+            menu.popup({ x, y });
+        };
+
         animationFrameId = requestAnimationFrame(() => {
             if (!terminalRef.current) { 
                 logger.warn('Terminal ref became null before animation frame execution.');
                 return;
             }
-            // Redundant check if outer check is sufficient, but safe
+
             if (isComponentInitializedRef.current && xtermInstanceRef.current) {
-                 logger.info('Initialization logic inside animationFrame found component already initialized.');
-                 performFit(); // Ensure fit if somehow re-entered and initialized
-                 xtermInstanceRef.current.focus();
-                 return;
+                logger.info('Initialization logic inside animationFrame found component already initialized.');
+                performFit();
+                xtermInstanceRef.current.focus();
+                return;
             }
 
             isComponentInitializedRef.current = true;
@@ -131,6 +281,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
                 fontSize: 14,
                 scrollback: 5000,
                 convertEol: true,
+                allowTransparency: true
             });
             xtermInstanceRef.current = xterm;
 
@@ -139,18 +290,81 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             xterm.loadAddon(fitAddonInstance);
             xterm.loadAddon(new WebLinksAddon());
 
-            xterm.open(terminalRef.current); // Critical call, now deferred
+            xterm.open(terminalRef.current);
+
+            // Handle Ctrl+V paste
+            xterm.attachCustomKeyEventHandler((e) => {
+                if (e.ctrlKey && e.key === 'v') {
+                    navigator.clipboard.readText()
+                        .then(text => {
+                            if (text) {
+                                ipcRenderer.send('terminal:input', { id: terminalId, data: text });
+                            }
+                        })
+                        .catch(err => logger.error('Failed to paste text:', err));
+                    return false;
+                }
+                return true;
+            });
+
+            // Add right-click handler for context menu
+            terminalRef.current.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (!xtermInstanceRef.current) return;
+
+                const hasSelection = xtermInstanceRef.current.hasSelection();
+                const selectedText = hasSelection ? xtermInstanceRef.current.getSelection() : '';
+                
+                const menuTemplate: MenuItemConstructorOptions[] = [
+                    {
+                        label: 'Copy',
+                        enabled: hasSelection,
+                        click: () => {
+                            if (hasSelection) {
+                                navigator.clipboard.writeText(selectedText)
+                                    .then(() => logger.debug('Text copied to clipboard via context menu'))
+                                    .catch(err => logger.error('Failed to copy text:', err));
+                            }
+                        }
+                    },
+                    {
+                        label: 'Paste',
+                        click: async () => {
+                            try {
+                                const text = await navigator.clipboard.readText();
+                                if (text) {
+                                    ipcRenderer.send('terminal:input', { id: terminalId, data: text });
+                                }
+                            } catch (err) {
+                                logger.error('Failed to paste text:', err);
+                            }
+                        }
+                    },
+                    { type: 'separator' as const },
+                    {
+                        label: 'Clear Terminal',
+                        click: () => {
+                            xtermInstanceRef.current?.clear();
+                        }
+                    }
+                ];
+
+                const menu = Menu.buildFromTemplate(menuTemplate);
+                menu.popup({ x: e.clientX, y: e.clientY });
+            });
 
             const currentDaisyTheme = document.documentElement.getAttribute('data-theme');
             applyXtermTheme(currentDaisyTheme);
             
             themeObserver = new MutationObserver((mutationsList) => {
-              for (const mutation of mutationsList) {
-                if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-                  const newThemeName = document.documentElement.getAttribute('data-theme');
-                  applyXtermTheme(newThemeName);
+                for (const mutation of mutationsList) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+                        const newThemeName = document.documentElement.getAttribute('data-theme');
+                        applyXtermTheme(newThemeName);
+                    }
                 }
-              }
             });
             themeObserver.observe(document.documentElement, { attributes: true });
             
@@ -159,7 +373,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
                 if (xtermInstanceRef.current) {
                     xtermInstanceRef.current.focus();
                 }
-            }, 100); // Delay after open and theme application
+            }, 100);
 
             if (!ptyCreationRequested.has(terminalId)) {
                 ipcRenderer.send('terminal:create', terminalId);
@@ -171,16 +385,13 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
 
             const handleTerminalData = (event: Electron.IpcRendererEvent, { id, data }: { id: string; data: string }) => {
                 if (id === terminalId && xtermInstanceRef.current) {
-                    // Check if this data contains command output markers
                     const isStartMarker = data.includes('__CMD_OUTPUT_START_');
                     const isEndMarker = data.includes('__CMD_OUTPUT_END_');
                     
-                    // Only write to xterm if it's not a marker
                     if (!isStartMarker && !isEndMarker) {
                         xtermInstanceRef.current.write(data);
                     }
 
-                    // Process history with cleaned data
                     const cleanedData = stripAnsiCodes(data);
                     localTerminalHistoryRef.current += cleanedData;
                     if (localTerminalHistoryRef.current.length > MAX_HISTORY_LENGTH) {
@@ -227,16 +438,18 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ terminalId, onHis
             if (terminalResizeObserver && terminalRef.current) {
                 terminalResizeObserver.unobserve(terminalRef.current);
             }
+            if (terminalRef.current) {
+                terminalRef.current.removeEventListener('contextmenu', handleRightClick);
+                terminalRef.current.removeEventListener('click', handleRightClick);
+            }
             if (xtermInstanceRef.current) {
                 xtermInstanceRef.current.dispose();
                 xtermInstanceRef.current = null;
             }
-            // isComponentInitializedRef.current = false; // Consider if needed for re-runs
         };
-    }, [terminalId, applyXtermTheme, logger, onHistoryChange]); // Added onHistoryChange to dependencies
+    }, [terminalId, applyXtermTheme, logger, onHistoryChange]);
 
     return (
-        // Use DaisyUI base color for the terminal container background
         <div 
             id={`terminal-container-${terminalId}`} 
             ref={terminalRef} 
